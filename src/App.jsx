@@ -26,6 +26,7 @@ import { Map } from 'lucide-react';
 import './App.css';
 
 import ErrorBoundary from './components/ErrorBoundary';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 function App() {
   const { currentStep, user, login, setStep } = useStore();
@@ -127,6 +128,7 @@ function App() {
         )}
 
         <BottomNav />
+        <SpeedInsights />
       </div>
     </ErrorBoundary>
   );
