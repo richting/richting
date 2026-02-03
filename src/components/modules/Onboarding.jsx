@@ -19,14 +19,19 @@ const Onboarding = () => {
                 transition={{ duration: 0.5 }}
                 className="relative w-full"
             >
-                <div className="absolute top-0 right-0 -mt-20 md:-mt-24">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.5, delay: 0.2 }}
+                    className="fixed top-6 right-6 z-50"
+                >
                     <button
                         onClick={handleLoginClick}
-                        className="text-sm font-medium text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full border border-gray-200 hover:border-blue-200 transition-all bg-white"
+                        className="text-sm font-medium text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full border border-gray-200 hover:border-blue-200 transition-all bg-white shadow-sm"
                     >
                         Inloggen
                     </button>
-                </div>
+                </motion.div>
 
                 <div className="mb-8">
                     <h1 className="text-4xl font-bold text-gray-900 mb-2">Richting</h1>

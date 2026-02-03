@@ -62,8 +62,8 @@ function App() {
         }
       } else {
         // No session - user is not logged in
-        // Redirect to login screen (step 3) instead of staying on onboarding (step 0)
-        setStep(3);
+        // Redirect to onboarding (step 0)
+        setStep(0);
       }
     };
 

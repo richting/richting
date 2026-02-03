@@ -137,7 +137,24 @@ const AuthScreen = () => {
             }
         } catch (err) {
             console.error('Auth error:', err);
-            setError(err.message || 'Er ging iets mis. Probeer het opnieuw.');
+
+            // Check for duplicate user error
+            if (err.message && (err.message.includes('User already registered') || err.message.includes('already registered'))) {
+                setError('Dit account bestaat al. Je wordt doorgestuurd naar inloggen...');
+
+                // Switch to login mode after 2 seconds
+                setTimeout(() => {
+                    setIsLogin(true);
+                    setError(null);
+                    setFormData(prev => ({ ...prev, password: '' })); // Clear password for security
+                }, 2000);
+            } else if (err.message && (err.message.includes('security purposes') || err.message.includes('seconds'))) {
+                setError('Je probeert het te vaak. Wacht even een minuutje voordat je het opnieuw probeert.');
+            } else if (err.message && err.message.includes('email rate limit exceeded')) {
+                setError('Te veel pogingen vanaf dit adres. Wacht even een uur voordat je het opnieuw probeert.');
+            } else {
+                setError(err.message || 'Er ging iets mis. Probeer het opnieuw.');
+            }
         } finally {
             setLoading(false);
         }
