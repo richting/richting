@@ -39,7 +39,7 @@ const TestHub = () => {
                         <div className="bg-gradient-to-r from-yellow-400 to-orange-400 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                             <Crown className="text-white w-8 h-8" />
                         </div>
-                        <h2 className="text-xl font-bold text-gray-900 mb-2">Premium Functie</h2>
+                        <h2 className="text-xl font-bold text-gray-900 mb-2">Premium Module</h2>
                         <p className="text-gray-600 mb-6">
                             Krijg toegang tot geavanceerde persoonlijkheids- en capaciteitentests om je profiel te verbeteren.
                         </p>
@@ -72,15 +72,15 @@ const TestHub = () => {
                     transition={{ delay: 0.1 }}
                     onClick={() => handleTestClick(13, true)}
                     className={`bg-white rounded-2xl p-6 shadow-md border-2 transition-all cursor-pointer group ${personalityCompleted
-                            ? 'border-green-200 bg-green-50/50'
-                            : 'border-blue-200 hover:border-blue-400 hover:shadow-lg'
+                        ? 'border-green-200 bg-green-50/50'
+                        : 'border-blue-200 hover:border-blue-400 hover:shadow-lg'
                         }`}
                 >
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${personalityCompleted
-                                    ? 'bg-green-100'
-                                    : 'bg-gradient-to-br from-blue-100 to-purple-100'
+                                ? 'bg-green-100'
+                                : 'bg-gradient-to-br from-blue-100 to-purple-100'
                                 }`}>
                                 <Brain className={`w-7 h-7 ${personalityCompleted ? 'text-green-600' : 'text-blue-600'
                                     }`} />
@@ -95,8 +95,8 @@ const TestHub = () => {
                             </div>
                         </div>
                         <ArrowRight className={`w-6 h-6 transition-transform ${personalityCompleted
-                                ? 'text-green-400'
-                                : 'text-blue-400 group-hover:translate-x-1'
+                            ? 'text-green-400'
+                            : 'text-blue-400 group-hover:translate-x-1'
                             }`} />
                     </div>
                 </motion.div>
@@ -108,19 +108,19 @@ const TestHub = () => {
                     transition={{ delay: 0.2 }}
                     onClick={() => handleTestClick(14, true, true)}
                     className={`bg-white rounded-2xl p-6 shadow-md border-2 transition-all ${capabilitiesCompleted
-                            ? 'border-green-200 bg-green-50/50 cursor-default'
-                            : !personalityCompleted
-                                ? 'border-gray-200 opacity-60 cursor-not-allowed'
-                                : 'border-orange-200 hover:border-orange-400 hover:shadow-lg cursor-pointer group'
+                        ? 'border-green-200 bg-green-50/50 cursor-default'
+                        : !personalityCompleted
+                            ? 'border-gray-200 opacity-60 cursor-not-allowed'
+                            : 'border-orange-200 hover:border-orange-400 hover:shadow-lg cursor-pointer group'
                         }`}
                 >
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${capabilitiesCompleted
-                                    ? 'bg-green-100'
-                                    : !personalityCompleted
-                                        ? 'bg-gray-100'
-                                        : 'bg-gradient-to-br from-orange-100 to-red-100'
+                                ? 'bg-green-100'
+                                : !personalityCompleted
+                                    ? 'bg-gray-100'
+                                    : 'bg-gradient-to-br from-orange-100 to-red-100'
                                 }`}>
                                 {!personalityCompleted ? (
                                     <Lock className="w-7 h-7 text-gray-400" />
@@ -147,8 +147,8 @@ const TestHub = () => {
                             <Lock className="w-6 h-6 text-gray-300" />
                         ) : (
                             <ArrowRight className={`w-6 h-6 transition-transform ${capabilitiesCompleted
-                                    ? 'text-green-400'
-                                    : 'text-orange-400 group-hover:translate-x-1'
+                                ? 'text-green-400'
+                                : 'text-orange-400 group-hover:translate-x-1'
                                 }`} />
                         )}
                     </div>
@@ -167,7 +167,7 @@ const TestHub = () => {
             {/* Info Section */}
             <div className="mt-8 bg-blue-50 rounded-xl p-4 border border-blue-100">
                 <p className="text-sm text-gray-600 text-center">
-                    💡 Beide tests verhogen je betrouwbaarheidsscore en verbeteren je matches
+                    💡 Beide modules verhogen je betrouwbaarheidsscore en verbeteren je matches
                 </p>
             </div>
         </div>

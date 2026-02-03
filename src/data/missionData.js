@@ -48,9 +48,10 @@ export const MISSIONS = [
 ];
 
 // Step mappings for navigation
+// Step mappings for navigation
 export const MISSION_STEP_MAP = {
-    personality: 8,
-    capabilities: 9,
+    personality: 8, // TestHub (where Personality is accessed)
+    capabilities: 14, // Direct to CapabilitiesModule
     work_values_deep: 10,
     practice_validation: 11
 };

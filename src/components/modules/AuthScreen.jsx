@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useStore } from '../../store/useStore';
 import { User, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { initializeUserData, loadUserData } from '../../utils/syncUserData';
+import { initializeUserData, loadUserData, saveUserScores, saveUserValues, saveUserProgress, savePersonalityVector } from '../../utils/syncUserData';
 
 const AuthScreen = () => {
     const { login, nextStep, isLoginMode, setLoginMode } = useStore();
@@ -67,7 +67,11 @@ const AuthScreen = () => {
                 }
 
                 // Load user data from database
-                const userData = await loadUserData(authData.user.id);
+                const { data: userData, error: loadError } = await loadUserData(authData.user.id);
+
+                if (loadError) {
+                    throw new Error('Kon gebruikersgegevens niet laden: ' + loadError.message);
+                }
 
                 // Update Zustand store with loaded data
                 login({
@@ -118,20 +122,46 @@ const AuthScreen = () => {
                     // Profile might not exist yet, use form data as fallback
                 }
 
-                // Initialize user data tables
-                await initializeUserData(authData.user.id);
+                // Check if we have local guest data to persist
+                const currentStore = useStore.getState();
+                const hasGuestData = currentStore.userScores.R > 0 || currentStore.userScores.I > 0 || // Has scores
+                    currentStore.reliabilityScore > 0 || // Has progress
+                    currentStore.currentStep > 0;
 
-                // Log the user in
+                if (hasGuestData) {
+                    console.log('Persisting guest data to new account...');
+                    await Promise.all([
+                        saveUserScores(authData.user.id, currentStore.userScores),
+                        saveUserValues(authData.user.id, currentStore.userValues),
+                        saveUserProgress(authData.user.id, {
+                            reliabilityScore: currentStore.reliabilityScore,
+                            completedModules: currentStore.completedModules,
+                            currentStep: currentStore.currentStep,
+                            dailySwipes: currentStore.dailySwipes,
+                            lastSwipeDate: currentStore.lastSwipeDate
+                        }),
+                        savePersonalityVector(authData.user.id, currentStore.personalityVector)
+                    ]);
+                } else {
+                    // No guest data, initialize with defaults
+                    await initializeUserData(authData.user.id);
+                }
+
+                // Log the user in - allow the store to load what we just saved (or defaults)
+                // We re-fetch to ensure the store strictly matches the DB state
+                const { data: userData, error: loadError } = await loadUserData(authData.user.id);
+
+                if (loadError) {
+                    // Start fresh if load fails, but warn
+                    console.error('Error loading new profile:', loadError);
+                }
+
                 login({
                     id: authData.user.id,
                     name: profile?.name || formData.name,
                     email: formData.email,
                     isPremium: profile?.is_premium || false
-                }, {
-                    scores: null,
-                    values: null,
-                    progress: null
-                });
+                }, userData); // userData will contain the guest data we just saved!
 
                 nextStep();
             }

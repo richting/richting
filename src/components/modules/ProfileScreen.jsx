@@ -1,11 +1,72 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-import { User, Shield, CreditCard, LogOut, CheckCircle, Lock, Map } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { User, Shield, CreditCard, LogOut, CheckCircle, Lock, Map, RotateCcw, Trash2, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const ProfileScreen = () => {
-    const { user, userScores, completedModules, isPremium, setPremium, logout, setStep } = useStore();
+    const { user, userScores, completedModules, isPremium, setPremium, logout, setStep, resetModule } = useStore();
+    const [resetting, setResetting] = useState(null); // Track which ID is being reset
+    const [isDataOpen, setIsDataOpen] = useState(false); // Unified accordion state
+
+    const MODULE_STEPS = {
+        'onboarding': 0,
+        'swipes': 1,
+        'dilemmas': 2,
+        'values': 10,
+        'bigfive': 13
+    };
+
+    const COMPLETION_MAPPING = {
+        'onboarding': 'onboarding', // or specific check
+        'swipes': 'onboarding_swipes',
+        'dilemmas': 'dilemmas',
+        'values': 'work_values_deep',
+        'bigfive': 'personality'
+    };
+
+    const handleReset = async (moduleId, label) => {
+        if (window.confirm(`Weet je zeker dat je "${label}" wilt wissen? Je moet deze module dan opnieuw doen om resultaten te zien.`)) {
+            setResetting(moduleId);
+            try {
+                await resetModule(moduleId);
+                // No navigation, just reset data
+            } catch (err) {
+                console.error('Reset failed', err);
+                alert(`Er ging iets mis bij het resetten: ${err.message || 'Onbekende fout'}`);
+            } finally {
+                setResetting(null);
+            }
+        }
+    };
+
+    const handleRedo = async (moduleId) => {
+        setResetting(moduleId);
+        try {
+            // For modules that accumulate data (like swipes), we must reset them to allow a "Redo".
+            // For others (like dilemmas), it might be optional, but consistent to start fresh or at least allow re-entry.
+            // check if specific modules need reset
+            if (['swipes', 'onboarding', 'bigfive'].includes(moduleId)) {
+                await resetModule(moduleId);
+            }
+            // For Dilemmas and Values, we might strictly not need to reset DB if we want to keep previous values visible,
+            // but resetting ensures clean state. However, the user said "Remove delete function",
+            // maybe they WANT to see old values? 
+            // DilemmaSlider loads from DB. If we don't reset, they see old values. That's good for "Edit".
+            // Swipes loads 0? No, it just adds. So we MUST reset Swipes.
+
+            // Navigate to the module
+            const targetStep = MODULE_STEPS[moduleId];
+            if (targetStep !== undefined) {
+                setStep(targetStep);
+            }
+        } catch (err) {
+            console.error('Redo failed', err);
+            alert(`Er ging iets mis bij het openen: ${err.message || 'Onbekende fout'}`);
+        } finally {
+            setResetting(null);
+        }
+    };
 
     const data = [
         { subject: 'Realistisch', A: userScores.R, fullMark: 20 },
@@ -69,30 +130,133 @@ const ProfileScreen = () => {
                 </div>
             </div>
 
-            {/* Test History */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-                <h3 className="font-bold text-gray-900 mb-4">Jouw Route</h3>
-                <div className="space-y-3">
-                    {modules.map(mod => {
-                        // Very rough approximation of completion tracking as we don't strictly track all IDs yet
-                        const isCompleted = completedModules.includes(mod.id) || (mod.id === 'onboarding') || (mod.id === 'swipes' && userScores.R > 0);
-                        // Assuming completion if score exists for swipes, etc. 
-                        // Real implementation would track IDs more strictly.
+            {/* Unified Data Management Section */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
+                <button
+                    onClick={() => setIsDataOpen(!isDataOpen)}
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="bg-gray-100 p-2 rounded-lg">
+                            <RotateCcw className="text-gray-600 w-5 h-5" />
+                        </div>
+                        <h3 className="font-bold text-gray-900">Gegevens & Voortgang</h3>
+                    </div>
+                    <motion.div
+                        animate={{ rotate: isDataOpen ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <ChevronDown className="text-gray-400 w-5 h-5" />
+                    </motion.div>
+                </button>
 
-                        return (
-                            <div key={mod.id} className="flex items-center justify-between">
-                                <span className="text-sm text-gray-600">{mod.label}</span>
-                                {isCompleted ? (
-                                    <CheckCircle size={18} className="text-green-500" />
-                                ) : (
-                                    <div className="bg-gray-100 p-1 rounded-full">
-                                        <Lock size={14} className="text-gray-400" />
+                <AnimatePresence>
+                    {isDataOpen && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.3, ease: 'easeInOut' }}
+                        >
+                            <div className="p-4 pt-0 border-t border-gray-50 mt-2">
+                                <p className="text-xs text-gray-500 mb-4 leading-relaxed bg-gray-50 p-3 rounded-lg">
+                                    Hier kun je jouw voortgang beheren. Wis resultaten om de interesse test opnieuw te doen, of start een missie opnieuw om je antwoorden aan te passen.
+                                </p>
+
+                                {/* Sub-Section: Interesse Test */}
+                                <div className="mb-6">
+                                    <h4 className="text-xs uppercase tracking-wider text-gray-500 font-bold mb-3 mt-2">Interesse Test</h4>
+                                    <div className="space-y-3">
+                                        {modules.filter(m => m.id === 'swipes').map(mod => {
+                                            const completionId = COMPLETION_MAPPING[mod.id] || mod.id;
+                                            const isStrictlyCompleted = completedModules.includes(completionId);
+                                            const isVisuallyCompleted = isStrictlyCompleted || (mod.id === 'swipes' && userScores.R > 0);
+
+                                            return (
+                                                <div key={mod.id} className="flex items-center justify-between p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                                                    <div className="flex items-center gap-3">
+                                                        <Map className="text-blue-500 w-4 h-4" />
+                                                        <span className="text-sm font-medium text-gray-700">{mod.label}</span>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3">
+                                                        {isVisuallyCompleted ? (
+                                                            <>
+                                                                <CheckCircle size={18} className="text-green-500" />
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleReset(mod.id, mod.label); }}
+                                                                    disabled={resetting === mod.id}
+                                                                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                                    title="Gegevens wissen"
+                                                                >
+                                                                    {resetting === mod.id ? (
+                                                                        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
+                                                                            <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full" />
+                                                                        </motion.div>
+                                                                    ) : (
+                                                                        <Trash2 size={16} />
+                                                                    )}
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <div className="bg-gray-200 p-1 rounded-full">
+                                                                <Lock size={14} className="text-gray-400" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                )}
+                                </div>
+
+                                {/* Sub-Section: Jouw Missies */}
+                                <div>
+                                    <h4 className="text-xs uppercase tracking-wider text-gray-500 font-bold mb-3">Test (Testcentrum)</h4>
+                                    <div className="space-y-3">
+                                        {modules.filter(m => m.id !== 'swipes').map(mod => {
+                                            const completionId = COMPLETION_MAPPING[mod.id] || mod.id;
+                                            const isStrictlyCompleted = completedModules.includes(completionId);
+                                            const isVisuallyCompleted = isStrictlyCompleted || (mod.id === 'onboarding');
+
+                                            return (
+                                                <div key={mod.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                                    <span className="text-sm font-medium text-gray-700">{mod.label}</span>
+                                                    <div className="flex items-center gap-3">
+                                                        {isVisuallyCompleted ? (
+                                                            <>
+                                                                <CheckCircle size={18} className="text-green-500" />
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleRedo(mod.id); }}
+                                                                    disabled={resetting === mod.id}
+                                                                    className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                    title="Opnieuw doen"
+                                                                >
+                                                                    {resetting === mod.id ? (
+                                                                        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
+                                                                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+                                                                        </motion.div>
+                                                                    ) : (
+                                                                        <RotateCcw size={16} />
+                                                                    )}
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <div className="bg-gray-200 p-1 rounded-full">
+                                                                <Lock size={14} className="text-gray-400" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
                             </div>
-                        );
-                    })}
-                </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             {/* Settings / Account */}

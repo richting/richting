@@ -47,7 +47,7 @@ const NextMission = () => {
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                             <Sparkles className="text-blue-600 w-5 h-5" />
-                            <h3 className="font-bold text-gray-900">Volgende Missie</h3>
+                            <h3 className="font-bold text-gray-900">Volgende Module</h3>
                         </div>
                         {nextMission.isPremium && (
                             <div className="flex items-center gap-1 bg-gradient-to-r from-yellow-400 to-orange-400 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">

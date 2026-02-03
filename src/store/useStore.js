@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import { saveUserScores, saveUserValues, saveUserProgress, savePersonalityVector } from '../utils/syncUserData';
+import { saveUserScores, saveUserValues, saveUserProgress, savePersonalityVector, resetUserModule } from '../utils/syncUserData';
 import { supabase } from '../lib/supabase';
 
-export const useStore = create((set) => ({
+export const useStore = create((set, get) => ({
     // RIASEC Scores (0-20 per category typically, normalized later)
     userScores: {
         R: 0,
@@ -51,30 +51,40 @@ export const useStore = create((set) => ({
 
     // Actions
     login: (userData, loadedData) => set((state) => {
-        // If we have loaded data from database, merge it into state
+        // Prepare strict state object to ensure clean slate
+        // This prevents "ghost" data from a previous onboarding session from being merged into
+        // an existing account if that account has no data or fails to load.
+
+        const defaultScores = { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 };
+        const defaultValues = { security: 5, creativity: 5, autonomy: 5, team: 5, dynamic: 5, impact: 5 };
+        const defaultPersonality = { extraversion: 0, conscientiousness: 0, openness: 0, agreeableness: 0, stability: 0 };
+
         const newState = {
             user: userData,
             isLoginMode: false,
-            isPremium: userData.isPremium || false
+            isPremium: userData.isPremium || false,
+
+            // STRICTLY OVERWRITE STATE - Do not allow shallow merge to keep old local state
+            userScores: loadedData?.scores || defaultScores,
+            userValues: loadedData?.values || defaultValues,
+            personalityVector: loadedData?.personalityVector || defaultPersonality,
+
+            // Progress is safer to merge if needed, but for "Clean Login" we usually want DB truth
+            reliabilityScore: loadedData?.progress?.reliabilityScore || 0,
+            completedModules: loadedData?.progress?.completedModules || [],
+            currentStep: loadedData?.progress?.currentStep ?? 4, // Default to home (4) if login
+            dailySwipes: loadedData?.progress?.dailySwipes || 0,
+            lastSwipeDate: loadedData?.progress?.lastSwipeDate || null
         };
 
-        if (loadedData) {
-            if (loadedData.scores) {
-                newState.userScores = loadedData.scores;
-            }
-            if (loadedData.values) {
-                newState.userValues = loadedData.values;
-            }
-            if (loadedData.progress) {
-                newState.reliabilityScore = loadedData.progress.reliabilityScore;
-                newState.completedModules = loadedData.progress.completedModules;
-                newState.currentStep = loadedData.progress.currentStep;
-                newState.dailySwipes = loadedData.progress.dailySwipes || 0;
-                newState.lastSwipeDate = loadedData.progress.lastSwipeDate || null;
-            }
-            if (loadedData.personalityVector) {
-                newState.personalityVector = loadedData.personalityVector;
-            }
+        // If we found a current step in DB (and it's not 0/onboarding), use it
+        // Or if it IS 0, we might want to keep it 0? 
+        // Logic: If user logs in, and has NO progress (step 0), they probably should go to onboarding?
+        // But the previous logic said "Redirect to home (4)" if authenticated.
+        // Let's stick to the safe "Home" default unless DB says otherwise.
+
+        if (loadedData?.progress?.currentStep !== undefined) {
+            newState.currentStep = loadedData.progress.currentStep;
         }
 
         return newState;
@@ -187,14 +197,41 @@ export const useStore = create((set) => ({
         return { personalityVector: vector };
     }),
 
-    nextStep: () => set((state) => ({ currentStep: state.currentStep + 1 })),
-    setStep: (step) => set((state) => {
-        // Prevent authenticated users from accessing onboarding steps (0-2)
-        if (state.user && step >= 0 && step <= 2) {
-            console.warn('Cannot navigate to onboarding steps while authenticated');
-            return { currentStep: 4 }; // Redirect to HomeScreen
+    nextStep: () => set((state) => {
+        const next = state.currentStep + 1;
+
+        // Auto-save progress
+        if (state.user?.id) {
+            saveUserProgress(state.user.id, {
+                reliabilityScore: state.reliabilityScore,
+                completedModules: state.completedModules,
+                currentStep: next,
+                dailySwipes: state.dailySwipes,
+                lastSwipeDate: state.lastSwipeDate
+            });
         }
-        return { currentStep: step };
+        return { currentStep: next };
+    }),
+
+    setStep: (step) => set((state) => {
+        // Previously we prevented authenticated users from accessing onboarding (0-2)
+        // But to allow "Reset / Redo", we now allow it.
+        // The initial Redirect on App Load is handled in App.jsx checkAuth, 
+        // ensuring they don't see onboarding accidentally.
+        let targetStep = step;
+
+        // Auto-save progress
+        if (state.user?.id) {
+            saveUserProgress(state.user.id, {
+                reliabilityScore: state.reliabilityScore,
+                completedModules: state.completedModules,
+                currentStep: targetStep,
+                dailySwipes: state.dailySwipes,
+                lastSwipeDate: state.lastSwipeDate
+            });
+        }
+
+        return { currentStep: targetStep };
     }),
 
     setPremium: (status) => set({ isPremium: status }),
@@ -253,6 +290,49 @@ export const useStore = create((set) => ({
             reliabilityScore: Math.min(100, state.reliabilityScore + scoreIncrease)
         };
     }),
+
+    resetModule: async (moduleName) => {
+        const state = get();
+
+        // 1. Call Backend
+        if (state.user?.id) {
+            await resetUserModule(state.user.id, moduleName);
+        }
+
+        // 2. Update Local State
+        set((state) => {
+            const updates = {};
+
+            // Map generic module names to specific internal IDs
+            const IDS_TO_REMOVE = {
+                'swipes': ['onboarding_swipes', 'swipes'],
+                'dilemmas': ['dilemmas'],
+                'values': ['work_values_deep', 'values_module', 'values'],
+                'bigfive': ['personality', 'personality_big_five', 'bigfive'],
+                'onboarding': ['onboarding']
+            };
+            const idsToRemove = IDS_TO_REMOVE[moduleName] || [moduleName];
+
+            // Remove from completedModules logic
+            updates.completedModules = state.completedModules.filter(m => !idsToRemove.includes(m));
+
+            // Reset specific data
+            if (moduleName === 'swipes') {
+                updates.userScores = { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 };
+                // Also reset trackings
+                updates.swipedActivities = [];
+                updates.dailySwipes = 0; // Optional: give them their swipes back? Maybe not strictly required but friendly.
+            }
+            else if (moduleName === 'dilemmas' || moduleName === 'values') {
+                updates.userValues = { security: 5, creativity: 5, autonomy: 5, team: 5, dynamic: 5, impact: 5 };
+            }
+            else if (moduleName === 'bigfive') {
+                updates.personalityVector = { extraversion: 0, conscientiousness: 0, openness: 0, agreeableness: 0, stability: 0 };
+            }
+
+            return updates;
+        });
+    },
 
     reset: () => set({
         userScores: { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 },

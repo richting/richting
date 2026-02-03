@@ -147,44 +147,81 @@ export async function saveUserResponse(userId, responseType, itemId, responseVal
  * @param {string} userId - User UUID
  * @returns {Object} User data object with scores, values, and progress
  */
+// Load user data from database
+// Returns { data: Object, error: Error | null }
 export async function loadUserData(userId) {
+    console.log('Loading user data for:', userId);
+
+    let criticalError = null;
+
+    // Helper to safely fetch single row
+    const fetchTable = async (table) => {
+        if (criticalError) return null; // Stop fetching if already failed
+
+        const { data, error } = await supabase
+            .from(table)
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+        if (error) {
+            // PGRST116 means 0 rows found - this is normal for new/empty accounts
+            if (error.code === 'PGRST116') {
+                return null;
+            }
+            // REAL Error (Network, Auth, etc)
+            console.error(`Error loading ${table}:`, error);
+            criticalError = error; // Capture the first error
+            return null;
+        }
+        return data;
+    };
+
     try {
-        const [scoresResult, valuesResult, progressResult] = await Promise.all([
-            supabase.from('user_scores').select('*').eq('user_id', userId).single(),
-            supabase.from('user_values').select('*').eq('user_id', userId).single(),
-            supabase.from('user_progress').select('*').eq('user_id', userId).single()
+        // Execute fetches in parallel
+        const [scoresData, valuesData, progressData] = await Promise.all([
+            fetchTable('user_scores'),
+            fetchTable('user_values'),
+            fetchTable('user_progress')
         ]);
 
-        return {
-            scores: scoresResult.data ? {
-                R: scoresResult.data.r_score,
-                I: scoresResult.data.i_score,
-                A: scoresResult.data.a_score,
-                S: scoresResult.data.s_score,
-                E: scoresResult.data.e_score,
-                C: scoresResult.data.c_score
+        if (criticalError) {
+            return { data: null, error: criticalError };
+        }
+
+        const userDataStructure = {
+            scores: scoresData ? {
+                R: scoresData.r_score,
+                I: scoresData.i_score,
+                A: scoresData.a_score,
+                S: scoresData.s_score,
+                E: scoresData.e_score,
+                C: scoresData.c_score
             } : null,
-            values: valuesResult.data ? {
-                security: valuesResult.data.security,
-                creativity: valuesResult.data.creativity,
-                autonomy: valuesResult.data.autonomy,
-                team: valuesResult.data.team,
-                dynamic: valuesResult.data.dynamic,
-                impact: valuesResult.data.impact
+            values: valuesData ? {
+                security: valuesData.security,
+                creativity: valuesData.creativity,
+                autonomy: valuesData.autonomy,
+                team: valuesData.team,
+                dynamic: valuesData.dynamic,
+                impact: valuesData.impact
             } : null,
-            progress: progressResult.data ? {
-                reliabilityScore: progressResult.data.reliability_score,
-                completedModules: progressResult.data.completed_modules,
-                currentStep: progressResult.data.current_step,
-                dailySwipes: progressResult.data.daily_swipes || 0,
-                lastSwipeDate: progressResult.data.last_swipe_date || null
+            progress: progressData ? {
+                reliabilityScore: progressData.reliability_score,
+                completedModules: progressData.completed_modules || [],
+                currentStep: progressData.current_step || 0,
+                dailySwipes: progressData.daily_swipes || 0,
+                lastSwipeDate: progressData.last_swipe_date || null
             } : null,
-            personalityVector: progressResult.data?.personality_vector ?
-                progressResult.data.personality_vector : null
+            personalityVector: progressData?.personality_vector ?
+                progressData.personality_vector : null
         };
+
+        return { data: userDataStructure, error: null };
+
     } catch (error) {
-        console.error('Failed to load user data:', error);
-        return { scores: null, values: null, progress: null, personalityVector: null };
+        console.error('Critical failure in loadUserData:', error);
+        return { data: null, error: error };
     }
 }
 
@@ -222,5 +259,78 @@ export async function initializeUserData(userId) {
         ]);
     } catch (error) {
         console.error('Failed to initialize user data:', error);
+    }
+}
+/**
+ * Reset a specific module's progress
+ * @param {string} userId - User UUID
+ * @param {string} moduleName - 'swipes', 'dilemmas', 'values', 'bigfive'
+ */
+export async function resetUserModule(userId, moduleName) {
+    try {
+        console.log(`Resetting module ${moduleName} for user ${userId}`);
+
+        // 1. Reset specific data tables
+        if (moduleName === 'onboarding') {
+            await supabase.from('user_progress').update({
+                current_step: 0
+            }).eq('user_id', userId);
+        }
+        else if (moduleName === 'swipes') {
+            await supabase.from('user_scores').upsert({
+                user_id: userId,
+                r_score: 0, i_score: 0, a_score: 0,
+                s_score: 0, e_score: 0, c_score: 0
+            }, { onConflict: 'user_id' });
+            // Also clear swiped cards tracking if possible?
+            // We don't have a table for that yet easily accessible here,
+            // but the scores are the main thing.
+        }
+        else if (moduleName === 'dilemmas' || moduleName === 'values') {
+            await supabase.from('user_values').upsert({
+                user_id: userId,
+                security: 5, creativity: 5, autonomy: 5,
+                team: 5, dynamic: 5, impact: 5
+            }, { onConflict: 'user_id' });
+        }
+        else if (moduleName === 'bigfive') {
+            await supabase.from('user_progress').update({
+                personality_vector: {
+                    extraversion: 0, conscientiousness: 0, openness: 0,
+                    agreeableness: 0, stability: 0
+                }
+            }).eq('user_id', userId);
+        }
+
+        // 2. Remove from completed_modules list
+        // Map generic module names (from Profile) to specific internal IDs (from Completion)
+        const IDS_TO_REMOVE = {
+            'swipes': ['onboarding_swipes', 'swipes'],
+            'dilemmas': ['dilemmas'],
+            'values': ['work_values_deep', 'values_module', 'values'],
+            'bigfive': ['personality', 'personality_big_five', 'bigfive'],
+            'onboarding': ['onboarding']
+        };
+
+        const idsToRemove = IDS_TO_REMOVE[moduleName] || [moduleName];
+
+        // First get current progress
+        const { data: progress } = await supabase
+            .from('user_progress')
+            .select('completed_modules')
+            .eq('user_id', userId)
+            .single();
+
+        if (progress && progress.completed_modules) {
+            const newModules = progress.completed_modules.filter(m => !idsToRemove.includes(m));
+
+            await supabase.from('user_progress').update({
+                completed_modules: newModules
+            }).eq('user_id', userId);
+        }
+
+    } catch (error) {
+        console.error(`Failed to reset module ${moduleName}:`, error);
+        throw error;
     }
 }

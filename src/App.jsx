@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useStore } from './store/useStore';
 import { supabase } from './lib/supabase';
 import { loadUserData } from './utils/syncUserData';
+import { useBrowserNavigation } from './hooks/useBrowserNavigation'; // Import hook
 import Onboarding from './components/modules/Onboarding';
 import VibeSwipe from './components/modules/VibeSwipe';
 import DilemmaSlider from './components/modules/DilemmaSlider';
@@ -30,6 +31,9 @@ import ErrorBoundary from './components/ErrorBoundary';
 function App() {
   const { currentStep, user, login, setStep } = useStore();
 
+  // Enable browser back/forward buttons
+  useBrowserNavigation();
+
   // Check for existing auth session on app load
   useEffect(() => {
     const checkAuth = async () => {
@@ -44,7 +48,16 @@ function App() {
           .single();
 
         if (profile) {
-          const userData = await loadUserData(session.user.id);
+          const { data: userData, error: loadError } = await loadUserData(session.user.id);
+
+          if (loadError) {
+            console.error('CRITICAL: Failed to load user data', loadError);
+            // TODO: Better UI for this, maybe a toast
+            alert('Er is een fout opgetreden bij het laden van je gegevens. Controleer je internetverbinding en ververs de pagina. (Code: DB_LOAD_FAIL)');
+            // Do NOT login with empty data to avoid overwriting
+            return;
+          }
+
           login({
             id: session.user.id,
             name: profile.name,
@@ -110,6 +123,7 @@ function App() {
         {currentStep === 13 && <PersonalityQuiz />}
         {currentStep === 14 && <CapabilitiesModule />}
         {currentStep === 15 && <PracticeValidationResults />}
+
 
 
         {/* DEV ONLY: Screen Flow Map */}
