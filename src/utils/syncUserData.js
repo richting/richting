@@ -37,17 +37,28 @@ export async function saveUserScores(userId, scores) {
  */
 export async function saveUserValues(userId, values) {
     try {
+        // Support both new O*NET keys and legacy keys for backward compatibility
+        const upsertData = {
+            user_id: userId,
+            // New O*NET Keys
+            achievement: values.achievement || 5,
+            independence: values.independence || 5,
+            recognition: values.recognition || 5,
+            relationships: values.relationships || 5,
+            support: values.support || 5,
+            working_conditions: values.working_conditions || 5,
+            // Legacy Keys (map roughly or keep defaults)
+            security: values.working_conditions || values.security || 5,
+            creativity: values.independence || values.creativity || 5,
+            autonomy: values.independence || values.autonomy || 5,
+            team: values.relationships || values.team || 5,
+            dynamic: values.recognition || values.dynamic || 5, // Rough mapping
+            impact: values.achievement || values.impact || 5
+        };
+
         const { error } = await supabase
             .from('user_values')
-            .upsert({
-                user_id: userId,
-                security: values.security || 5,
-                creativity: values.creativity || 5,
-                autonomy: values.autonomy || 5,
-                team: values.team || 5,
-                dynamic: values.dynamic || 5,
-                impact: values.impact || 5
-            }, {
+            .upsert(upsertData, {
                 onConflict: 'user_id'
             });
 
@@ -57,6 +68,32 @@ export async function saveUserValues(userId, values) {
         }
     } catch (error) {
         console.error('Failed to save user values:', error);
+    }
+}
+
+/**
+ * Save user self-efficacy (skills confidence) to database
+ * @param {string} userId - User UUID
+ * @param {Object} efficacyMap - Map of skill_key -> confidence_score (1-10)
+ */
+export async function saveUserSelfEfficacy(userId, efficacyMap) {
+    try {
+        const { error } = await supabase
+            .from('user_progress')
+            .upsert({
+                user_id: userId,
+                self_efficacy: efficacyMap
+            }, {
+                onConflict: 'user_id',
+                ignoreDuplicates: false
+            });
+
+        if (error) {
+            console.error('Error saving self efficacy:', error);
+            throw error;
+        }
+    } catch (error) {
+        console.error('Failed to save self efficacy:', error);
     }
 }
 
@@ -199,6 +236,14 @@ export async function loadUserData(userId) {
                 C: scoresData.c_score
             } : null,
             values: valuesData ? {
+                // New O*NET Keys
+                achievement: valuesData.achievement || 5,
+                independence: valuesData.independence || 5,
+                recognition: valuesData.recognition || 5,
+                relationships: valuesData.relationships || 5,
+                support: valuesData.support || 5,
+                working_conditions: valuesData.working_conditions || 5,
+                // Legacy Fallback
                 security: valuesData.security,
                 creativity: valuesData.creativity,
                 autonomy: valuesData.autonomy,
@@ -214,7 +259,9 @@ export async function loadUserData(userId) {
                 lastSwipeDate: progressData.last_swipe_date || null
             } : null,
             personalityVector: progressData?.personality_vector ?
-                progressData.personality_vector : null
+                progressData.personality_vector : null,
+            selfEfficacy: progressData?.self_efficacy ?
+                progressData.self_efficacy : null
         };
 
         return { data: userDataStructure, error: null };

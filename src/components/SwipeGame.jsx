@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Heart, ArrowRight } from 'lucide-react';
-import Card from './Card';
+import { SwipeCard } from './assessments/SwipeCard';
 import { swipeCards } from '../data/swipeCards';
 
 const SwipeGame = ({ onComplete, userScores, setUserScores }) => {
@@ -10,7 +10,7 @@ const SwipeGame = ({ onComplete, userScores, setUserScores }) => {
 
   const handleSwipe = (swipeDirection, tag) => {
     setDirection(swipeDirection);
-    
+
     // Update scores
     if (swipeDirection === 'right') {
       setUserScores(prev => ({
@@ -75,7 +75,7 @@ const SwipeGame = ({ onComplete, userScores, setUserScores }) => {
           <AnimatePresence>
             {swipeCards.slice(currentIndex, currentIndex + 3).map((card, index) => {
               const isTop = index === 0;
-              
+
               return (
                 <motion.div
                   key={card.id}
@@ -85,17 +85,17 @@ const SwipeGame = ({ onComplete, userScores, setUserScores }) => {
                     scale: 1 - index * 0.05,
                     y: index * 10,
                     opacity: 1,
-                    rotate: isTop && direction === 'right' ? 15 : 
-                           isTop && direction === 'left' ? -15 : 0,
-                    x: isTop && direction === 'right' ? 300 : 
-                       isTop && direction === 'left' ? -300 : 0
+                    rotate: isTop && direction === 'right' ? 15 :
+                      isTop && direction === 'left' ? -15 : 0,
+                    x: isTop && direction === 'right' ? 300 :
+                      isTop && direction === 'left' ? -300 : 0
                   }}
                   exit={{ opacity: 0, scale: 0.8 }}
                   transition={{ duration: 0.3 }}
                   style={{ zIndex: swipeCards.length - index }}
                 >
                   {isTop ? (
-                    <Card
+                    <SwipeCard
                       card={card}
                       onSwipe={handleSwipe}
                     />

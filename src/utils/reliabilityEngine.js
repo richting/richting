@@ -5,57 +5,33 @@
  */
 export const MODULES = {
     ONBOARDING_SWIPES: {
-        id: 'onboarding_swipes',
+        id: 'onboarding', // Changed from 'onboarding_swipes' to match missionData.js
         name: 'Onboarding Swipes',
         scoreValue: 30,
         requiresPremium: false
     },
     PERSONALITY_BIG_FIVE: {
-        id: 'personality_big_five',
+        id: 'personality', // Changed from 'personality_big_five'
         name: 'Persoonlijkheid (Big Five)',
         scoreValue: 20,
         requiresPremium: true
     },
-    VALUES_MODULE: {
-        id: 'values_module',
-        name: 'Waarden Module',
+    CAPABILITIES: {
+        id: 'capabilities',
+        name: 'Capaciteiten',
         scoreValue: 20,
         requiresPremium: true
     },
-    DAILY_DILEMMA_1: {
-        id: 'daily_dilemma_1',
-        name: 'Daily Dilemma 1',
-        scoreValue: 5,
+    WORK_VALUES_DEEP: {
+        id: 'work_values_deep',
+        name: 'Werkwaarden Verdieping',
+        scoreValue: 15,
         requiresPremium: false
     },
-    DAILY_DILEMMA_2: {
-        id: 'daily_dilemma_2',
-        name: 'Daily Dilemma 2',
-        scoreValue: 5,
-        requiresPremium: false
-    },
-    DAILY_DILEMMA_3: {
-        id: 'daily_dilemma_3',
-        name: 'Daily Dilemma 3',
-        scoreValue: 5,
-        requiresPremium: false
-    },
-    DAILY_DILEMMA_4: {
-        id: 'daily_dilemma_4',
-        name: 'Daily Dilemma 4',
-        scoreValue: 5,
-        requiresPremium: false
-    },
-    DAILY_DILEMMA_5: {
-        id: 'daily_dilemma_5',
-        name: 'Daily Dilemma 5',
-        scoreValue: 5,
-        requiresPremium: false
-    },
-    DAILY_DILEMMA_6: {
-        id: 'daily_dilemma_6',
-        name: 'Daily Dilemma 6',
-        scoreValue: 5,
+    PRACTICE_VALIDATION: {
+        id: 'practice_validation',
+        name: 'Praktijk-validatie',
+        scoreValue: 15,
         requiresPremium: false
     }
 };

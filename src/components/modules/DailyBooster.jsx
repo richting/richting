@@ -1,192 +1,145 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Zap, ArrowRight, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Zap, Clock, CheckCircle, Brain } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { getNextModule } from '../../utils/reliabilityEngine';
+import { assessmentService } from '../../services/assessmentService';
+import ScoutAvatar from '../assessments/ScoutAvatar';
 
 const DailyBooster = () => {
-    const { completedModules, isPremium, updateReliability, reliabilityScore } = useStore();
-    const [isCompleting, setIsCompleting] = useState(false);
-    const [justCompleted, setJustCompleted] = useState(false);
+    const { user, addScore, updateReliability } = useStore();
+    const [loading, setLoading] = useState(true);
+    const [dilemma, setDilemma] = useState(null);
+    const [completed, setCompleted] = useState(false);
+    const [scoutMsg, setScoutMsg] = useState(null);
 
-    const nextModule = getNextModule(completedModules, isPremium);
+    useEffect(() => {
+        const fetchDilemma = async () => {
+            try {
+                // Check local storage or user progress for daily limit
+                const lastBooster = localStorage.getItem(`last_booster_${user?.id}`);
+                const today = new Date().toISOString().split('T')[0];
 
-    // Sample tasks for daily dilemmas
-    const tasks = [
-        {
-            id: 'daily_dilemma_1',
-            title: 'Beantwoord 3 vragen over je ideale werkomgeving',
-            description: 'Kies tussen werken in een team of solo',
-            scoreValue: 5
-        },
-        {
-            id: 'daily_dilemma_2',
-            title: 'Deel je voorkeur voor werkstijl',
-            description: 'Gestructureerd of flexibel werken?',
-            scoreValue: 5
-        },
-        {
-            id: 'daily_dilemma_3',
-            title: 'Kies je ideale werklocatie',
-            description: 'Kantoor, thuis, of hybride?',
-            scoreValue: 5
-        },
-        {
-            id: 'daily_dilemma_4',
-            title: 'Bepaal je communicatiestijl',
-            description: 'Direct of diplomatiek?',
-            scoreValue: 5
-        },
-        {
-            id: 'daily_dilemma_5',
-            title: 'Kies je leiderschapsstijl',
-            description: 'Leiden of volgen?',
-            scoreValue: 5
-        },
-        {
-            id: 'daily_dilemma_6',
-            title: 'Deel je risicoprofiel',
-            description: 'Veilig of avontuurlijk?',
-            scoreValue: 5
+                if (lastBooster === today) {
+                    setCompleted(true);
+                    setLoading(false);
+                    return;
+                }
+
+                const questions = await assessmentService.getQuestions('dilemma');
+                if (questions && questions.length > 0) {
+                    // Pick random dilemma
+                    const random = questions[Math.floor(Math.random() * questions.length)];
+                    setDilemma({
+                        id: random.id,
+                        text: random.question_text,
+                        ...random.metadata
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to fetch dilemma", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchDilemma();
+    }, [user?.id]);
+
+    const handleChoice = async (option) => { // 'A' or 'B'
+        if (!dilemma) return;
+
+        const scores = option === 'A' ? dilemma.scoreA : dilemma.scoreB;
+
+        // Update scores
+        if (scores) {
+            Object.entries(scores).forEach(([key, val]) => {
+                addScore(key, val); // key is R, I, A, S, E, C or Big5 char
+            });
         }
-    ];
 
-    // Find current active task
-    const activeTask = tasks.find(task => !completedModules.includes(task.id));
+        // Save progress
+        if (user?.id) {
+            const today = new Date().toISOString().split('T')[0];
+            localStorage.setItem(`last_booster_${user.id}`, today);
+            // Optionally save to DB log
+        }
 
-    const handleCompleteTask = () => {
-        if (!activeTask || isCompleting) return;
+        // Feedback
+        setScoutMsg("Interessante keuze! Dat past bij jou. 🧠");
+        updateReliability('daily_booster', 5);
 
-        setIsCompleting(true);
-
-        // Simulate task completion with animation
+        // Show completion
         setTimeout(() => {
-            updateReliability(activeTask.id, activeTask.scoreValue);
-            setJustCompleted(true);
-            setIsCompleting(false);
-
-            // Reset completion state after animation
-            setTimeout(() => {
-                setJustCompleted(false);
-            }, 2000);
-        }, 800);
+            setCompleted(true);
+        }, 1500);
     };
 
-    // If all tasks completed or score is 100%
-    if (!activeTask || reliabilityScore >= 100) {
+    if (loading) return <div className="p-8 text-center text-gray-500">Laden...</div>;
+
+    if (completed) {
         return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200"
-            >
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="bg-green-500 rounded-full p-2">
-                        <CheckCircle className="text-white" size={24} />
-                    </div>
-                    <h3 className="font-bold text-gray-900 text-lg">Alles voltooid!</h3>
+            <div className="bg-white rounded-2xl shadow-sm border border-green-100 p-8 text-center">
+                <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle className="text-green-600 w-8 h-8" />
                 </div>
-                <p className="text-sm text-gray-600">
-                    Je hebt alle beschikbare taken voltooid. {!isPremium && 'Upgrade naar Premium voor meer modules!'}
-                </p>
-            </motion.div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Daily Booster Voltooid!</h3>
+                <p className="text-gray-600 mb-6">Je hebt je dagelijkse inzicht binnen. Kom morgen terug voor een nieuwe.</p>
+                <div className="flex justify-center gap-2 text-sm font-medium text-orange-500 bg-orange-50 py-2 px-4 rounded-full inline-flex">
+                    <Zap size={16} /> +5% Betrouwbaarheid
+                </div>
+            </div>
         );
     }
 
+    if (!dilemma) return null;
+
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
-        >
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden max-w-md mx-auto relative">
             {/* Header */}
-            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 p-4">
-                <div className="flex items-center gap-2 text-white">
-                    <Zap size={20} fill="white" />
-                    <h3 className="font-bold text-lg">Verhoog je score</h3>
+            <div className="bg-gradient-to-r from-violet-500 to-fuchsia-500 p-6 text-white text-center">
+                <Brain className="w-8 h-8 mx-auto mb-2 opacity-80" />
+                <h2 className="text-xl font-bold">Daily Dilemma</h2>
+                <p className="text-white/80 text-sm">Wat past het beste bij jou?</p>
+            </div>
+
+            {/* Dilemma Content */}
+            <div className="p-8">
+                <h3 className="text-lg font-bold text-gray-900 text-center mb-8 leading-relaxed">
+                    "{dilemma.text}"
+                </h3>
+
+                <div className="space-y-4">
+                    <button
+                        onClick={() => handleChoice('A')}
+                        className="w-full p-4 rounded-xl border-2 border-gray-100 hover:border-violet-500 hover:bg-violet-50 transition-all text-left group"
+                    >
+                        <span className="font-semibold text-gray-700 group-hover:text-violet-700 block mb-1">Optie A</span>
+                        <span className="text-sm text-gray-500">{dilemma.optionA}</span>
+                    </button>
+
+                    <div className="relative flex items-center justify-center">
+                        <div className="border-t border-gray-100 w-full absolute"></div>
+                        <span className="bg-white px-2 text-xs text-gray-400 font-bold uppercase relative z-10">of</span>
+                    </div>
+
+                    <button
+                        onClick={() => handleChoice('B')}
+                        className="w-full p-4 rounded-xl border-2 border-gray-100 hover:border-fuchsia-500 hover:bg-fuchsia-50 transition-all text-left group"
+                    >
+                        <span className="font-semibold text-gray-700 group-hover:text-fuchsia-700 block mb-1">Optie B</span>
+                        <span className="text-sm text-gray-500">{dilemma.optionB}</span>
+                    </button>
                 </div>
             </div>
 
-            {/* Content */}
-            <div className="p-6">
-                <div className="mb-4">
-                    <h4 className="font-bold text-gray-900 mb-1">{activeTask.title}</h4>
-                    <p className="text-sm text-gray-600">{activeTask.description}</p>
-                </div>
-
-                {/* Score Badge */}
-                <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold mb-4">
-                    <Zap size={14} />
-                    +{activeTask.scoreValue}% betrouwbaarheid
-                </div>
-
-                {/* Action Button */}
-                <button
-                    onClick={handleCompleteTask}
-                    disabled={isCompleting || justCompleted}
-                    className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all transform ${justCompleted
-                            ? 'bg-green-500 text-white'
-                            : isCompleting
-                                ? 'bg-gray-300 text-gray-500'
-                                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]'
-                        }`}
-                >
-                    {justCompleted ? (
-                        <>
-                            <CheckCircle size={20} />
-                            Voltooid!
-                        </>
-                    ) : isCompleting ? (
-                        'Bezig...'
-                    ) : (
-                        <>
-                            Start taak
-                            <ArrowRight size={20} />
-                        </>
-                    )}
-                </button>
-
-                {/* Progress Indicator */}
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex justify-between text-xs text-gray-500 mb-2">
-                        <span>Dagelijkse taken</span>
-                        <span>{completedModules.filter(m => m.startsWith('daily_dilemma')).length} / {tasks.length}</span>
+            {/* Scout */}
+            <AnimatePresence>
+                {scoutMsg && (
+                    <div className="absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none">
+                        <ScoutAvatar emotion="happy" message={scoutMsg} />
                     </div>
-                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                        <motion.div
-                            className="h-full bg-gradient-to-r from-yellow-400 to-orange-500"
-                            initial={{ width: 0 }}
-                            animate={{
-                                width: `${(completedModules.filter(m => m.startsWith('daily_dilemma')).length / tasks.length) * 100}%`
-                            }}
-                            transition={{ duration: 0.5 }}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* Completion Animation */}
-            {justCompleted && (
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 flex items-center justify-center bg-white/90 backdrop-blur-sm"
-                >
-                    <div className="text-center">
-                        <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: [0, 1.2, 1] }}
-                            transition={{ duration: 0.5 }}
-                            className="bg-green-500 rounded-full p-4 inline-block mb-2"
-                        >
-                            <CheckCircle className="text-white" size={48} />
-                        </motion.div>
-                        <p className="font-bold text-gray-900">+{activeTask.scoreValue}% toegevoegd!</p>
-                    </div>
-                </motion.div>
-            )}
-        </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
     );
 };
 

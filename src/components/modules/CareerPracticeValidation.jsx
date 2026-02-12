@@ -5,7 +5,7 @@ import { useStore } from '../../store/useStore';
 import { getScenariosForCareerDirection } from '../../data/careerScenarios';
 
 const CareerPracticeValidation = () => {
-    const { selectedCareerDirection, addScore, setStep, user, userScores, setValidationResults } = useStore();
+    const { selectedCareerDirection, addScore, setStep, user, userScores, setValidationResults, completeModule } = useStore();
     const [currentQuestion, setCurrentQuestion] = useState(0);
     const [answers, setAnswers] = useState({});
     const [scenarios, setScenarios] = useState([]);
@@ -48,7 +48,9 @@ const CareerPracticeValidation = () => {
                     careerDirection: selectedCareerDirection?.name || selectedCareerDirection?.direction
                 };
                 console.log('CareerPracticeValidation - Saving results:', resultsToSave);
+                console.log('CareerPracticeValidation - Saving results:', resultsToSave);
                 setValidationResults(resultsToSave);
+                completeModule('career_practice', 10); // Mark as completed
                 setStep(15); // Navigate to results screen
             } else {
                 // Fallback if initial scores weren't captured

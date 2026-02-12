@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { initializeUserData, loadUserData, saveUserScores, saveUserValues, saveUserProgress, savePersonalityVector } from '../../utils/syncUserData';
 
 const AuthScreen = () => {
-    const { login, nextStep, isLoginMode, setLoginMode } = useStore();
+    const { login, nextStep, setStep, isLoginMode, setLoginMode } = useStore();
     const [isLogin, setIsLogin] = useState(isLoginMode);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -78,16 +78,17 @@ const AuthScreen = () => {
                     id: authData.user.id,
                     name: profile.name,
                     email: profile.email,
-                    isPremium: profile.is_premium
+                    isPremium: true // Force premium for everyone
                 }, userData);
 
                 // If user has existing progress, go directly to HomeScreen
                 // Otherwise, continue with the normal flow (nextStep)
-                if (userData?.progress && (userData.progress.reliabilityScore > 0 || userData.progress.currentStep >= 4)) {
-                    // User has completed onboarding before, go to their saved step or HomeScreen
-                    // The login() already set currentStep from userData, so we're done
-                } else {
-                    nextStep();
+                // Check if we need to redirect to Home
+                // If user is at step 5 (Auth) or lower (Onboarding), send to 6 (Home)
+                // If user was at 7+ (Profile, Matches), let them stay there
+                const currentStep = useStore.getState().currentStep;
+                if (currentStep < 6) {
+                    setStep(6);
                 }
             } else {
                 // SIGNUP FLOW
@@ -160,7 +161,7 @@ const AuthScreen = () => {
                     id: authData.user.id,
                     name: profile?.name || formData.name,
                     email: formData.email,
-                    isPremium: profile?.is_premium || false
+                    isPremium: true // Force premium for everyone
                 }, userData); // userData will contain the guest data we just saved!
 
                 nextStep();

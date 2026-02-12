@@ -1,8 +1,8 @@
 export const MISSIONS = [
     {
         id: 'onboarding',
-        title: 'Basis Onboarding',
-        description: 'Swipes en Dilemma\'s voltooid',
+        title: 'Interest Explorer',
+        description: 'Ontdek je interesses (RIASEC)',
         scoreIncrease: 30,
         isPremium: false,
         completed: true, // Auto-completed after onboarding
@@ -12,48 +12,47 @@ export const MISSIONS = [
     {
         id: 'personality',
         title: 'Persoonlijkheid',
-        description: 'Verdiep je persoonlijkheidsprofiel',
+        description: 'Big Five Persoonlijkheidstest',
         scoreIncrease: 20,
-        isPremium: true,
+        isPremium: false, // Made free as part of core flow
         icon: '🧠',
         order: 1
     },
     {
-        id: 'capabilities',
-        title: 'Capaciteiten',
-        description: 'Ontdek je sterke punten',
+        id: 'work_values_deep',
+        title: 'Werkwaarden',
+        description: 'Wat vind jij belangrijk?',
         scoreIncrease: 20,
-        isPremium: true,
-        icon: '💪',
+        isPremium: false, // Made free as part of core flow
+        icon: '⚖️',
         order: 2
     },
     {
-        id: 'work_values_deep',
-        title: 'Werkwaarden Verdieping',
-        description: 'Verfijn je werkwaarden',
-        scoreIncrease: 15,
-        isPremium: false,
-        icon: '⚖️',
+        id: 'capabilities',
+        title: 'Capaciteiten',
+        description: 'Ken je eigen kracht (SCCT)',
+        scoreIncrease: 20,
+        isPremium: true,
+        icon: '💪',
         order: 3
     },
     {
         id: 'practice_validation',
         title: 'Praktijk-validatie',
-        description: 'Valideer met echte scenario\'s',
-        scoreIncrease: 15,
-        isPremium: false,
+        description: 'Valideer je top-matches',
+        scoreIncrease: 10,
+        isPremium: true,
         icon: '✅',
         order: 4
     }
 ];
 
 // Step mappings for navigation
-// Step mappings for navigation
 export const MISSION_STEP_MAP = {
-    personality: 8, // TestHub (where Personality is accessed)
-    capabilities: 14, // Direct to CapabilitiesModule
-    work_values_deep: 10,
-    practice_validation: 11
+    personality: 2, // Now part of onboarding flow
+    work_values_deep: 3, // Now part of onboarding flow
+    capabilities: 14, // Accessed from Hub
+    practice_validation: 11 // Accessed from Hub
 };
 
 // Helper to get next uncompleted mission

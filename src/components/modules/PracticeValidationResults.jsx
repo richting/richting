@@ -6,7 +6,7 @@ import { careerDirections } from '../../data/careerDirections';
 import { calculateMatches } from '../../utils/matchingEngine';
 
 const PracticeValidationResults = () => {
-    const { validationResults, clearValidationResults, setStep, isPremium, userValues, personalityVector, reliabilityScore } = useStore();
+    const { validationResults, clearValidationResults, setStep, userValues, personalityVector, reliabilityScore } = useStore();
     const [beforeMatches, setBeforeMatches] = useState([]);
     const [afterMatches, setAfterMatches] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -93,8 +93,8 @@ const PracticeValidationResults = () => {
         C: afterScores.C - beforeScores.C
     };
 
-    // Get directions to display  (1 for free, 5 for premium)
-    const directionsToShow = isPremium ? afterMatches.slice(0, 5) : afterMatches.slice(0, 1);
+    // Get directions to display (Always top 5)
+    const directionsToShow = afterMatches.slice(0, 5);
 
     // Find ranking changes
     const getRankingChange = (directionTitle) => {
@@ -200,21 +200,21 @@ const PracticeValidationResults = () => {
             >
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-bold text-gray-900">
-                        {isPremium ? 'Top 5 Richtingen' : 'Top Richting'}
+                        Top 5 Richtingen
                     </h2>
-                    {isPremium && (
-                        <Crown className="text-yellow-500 w-5 h-5" />
-                    )}
+                    <Crown className="text-yellow-500 w-5 h-5" />
                 </div>
 
-                {directionsToShow.length === 0 && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                        <p className="text-sm text-yellow-800">
-                            <strong>Debug:</strong> Geen richtingen gevonden.<br />
-                            afterMatches: {afterMatches.length} | beforeMatches: {beforeMatches.length}
-                        </p>
-                    </div>
-                )}
+                {
+                    directionsToShow.length === 0 && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                            <p className="text-sm text-yellow-800">
+                                <strong>Debug:</strong> Geen richtingen gevonden.<br />
+                                afterMatches: {afterMatches.length} | beforeMatches: {beforeMatches.length}
+                            </p>
+                        </div>
+                    )
+                }
 
                 <div className="space-y-3">
                     {directionsToShow.map((direction, index) => {
@@ -258,8 +258,8 @@ const PracticeValidationResults = () => {
                                             </div>
                                         )}
 
-                                        {/* Score percentage change (for premium users) */}
-                                        {isPremium && scoreChange !== 0 && (
+                                        {/* Score percentage change */}
+                                        {scoreChange !== 0 && (
                                             <div className={`flex items-center gap-1 ${scoreChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
                                                 {scoreChange > 0 ? (
                                                     <>
@@ -292,39 +292,18 @@ const PracticeValidationResults = () => {
                         );
                     })}
                 </div>
-            </motion.div>
+            </motion.div >
 
-            {/* Premium Upgrade CTA for free users */}
-            {!isPremium && (
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5 }}
-                    className="bg-gradient-to-br from-yellow-50 to-amber-50 rounded-2xl p-6 border-2 border-yellow-200 mb-6"
-                >
-                    <div className="flex items-start gap-3">
-                        <Crown className="text-yellow-600 w-6 h-6 flex-shrink-0 mt-0.5" />
-                        <div>
-                            <h3 className="font-bold text-gray-900 mb-1">Ontdek je top 5 richtingen</h3>
-                            <p className="text-sm text-gray-600 mb-3">
-                                Met Premium krijg je inzicht in je top 5 meest passende richtingen en zie je precies waar je groei hebt geboekt.
-                            </p>
-                            <button className="bg-gradient-to-r from-yellow-500 to-amber-500 text-white px-4 py-2 rounded-lg font-medium hover:from-yellow-600 hover:to-amber-600 transition-all shadow-md">
-                                Upgrade naar Premium
-                            </button>
-                        </div>
-                    </div>
-                </motion.div>
-            )}
+
 
             {/* Continue Button */}
-            <button
+            < button
                 onClick={handleClose}
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-xl font-bold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg"
             >
                 Terug naar overzicht
-            </button>
-        </div>
+            </button >
+        </div >
     );
 };
 

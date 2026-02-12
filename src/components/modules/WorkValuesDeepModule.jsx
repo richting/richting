@@ -1,150 +1,209 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Scale, Check } from 'lucide-react';
+import { Scale, ArrowRight, Loader2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { getMissionById } from '../../data/missionData';
+import { assessmentService } from '../../services/assessmentService';
+import ScoutAvatar from '../assessments/ScoutAvatar';
 
-const WorkValuesDeepModule = () => {
-    const { completeModule, setStep, setValue } = useStore();
-    const [currentQuestion, setCurrentQuestion] = useState(0);
+const WorkValuesDeepModule = ({ isStandalone = false }) => {
+    const { setStep, user, setValue } = useStore();
+    const [started, setStarted] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [definitions, setDefinitions] = useState([]);
 
-    const valueQuestions = [
-        {
-            id: 'security',
-            label: 'Zekerheid & Stabiliteit',
-            question: 'Hoe belangrijk is een vaste baan met voorspelbare inkomsten voor jou?',
-            scenarios: [
-                'Een vast contract met gemiddeld salaris',
-                'Een flexibel contract met hoger salaris maar minder zekerheid'
-            ]
-        },
-        {
-            id: 'creativity',
-            label: 'Creativiteit & Innovatie',
-            question: 'Hoeveel ruimte wil je voor creatief en innovatief werk?',
-            scenarios: [
-                'Dagelijks nieuwe uitdagingen en creatieve vrijheid',
-                'Gestructureerde taken met bewezen methodes'
-            ]
-        },
-        {
-            id: 'autonomy',
-            label: 'Autonomie & Vrijheid',
-            question: 'Hoe belangrijk is het om je eigen tijd en werk in te delen?',
-            scenarios: [
-                'Volledige controle over je werkdag en projecten',
-                'Duidelijke structuur en begeleiding van een manager'
-            ]
-        },
-        {
-            id: 'team',
-            label: 'Teamwerk & Samenwerking',
-            question: 'Hoe belangrijk is intensieve samenwerking met collega\'s?',
-            scenarios: [
-                'Constant samenwerken in teams',
-                'Vooral zelfstandig werken met periodiek overleg'
-            ]
-        },
-        {
-            id: 'dynamic',
-            label: 'Dynamiek & Afwisseling',
-            question: 'Hoeveel afwisseling en dynamiek wil je in je werk?',
-            scenarios: [
-                'Elke dag anders, veel variatie',
-                'Voorspelbare routine met duidelijke patronen'
-            ]
-        },
-        {
-            id: 'impact',
-            label: 'Impact & Betekenis',
-            question: 'Hoe belangrijk is het dat je werk een zichtbare impact heeft?',
-            scenarios: [
-                'Direct zichtbare resultaten en maatschappelijke impact',
-                'Bijdragen aan een groter geheel, ook achter de schermen'
-            ]
-        }
-    ];
+    // Default state matching DB columns
+    const [values, setValues] = useState({
+        achievement: 5,
+        independence: 5,
+        recognition: 5,
+        relationships: 5,
+        support: 5,
+        working_conditions: 5
+    });
 
-    const handleScenarioChoice = (preferFirst) => {
-        const question = valueQuestions[currentQuestion];
-        // Update the value: if they prefer first scenario, increase value, otherwise decrease
-        const newValue = preferFirst ? 8 : 3;
-        setValue(question.id, newValue);
+    useEffect(() => {
+        const fetchDefinitions = async () => {
+            try {
+                const data = await assessmentService.getQuestions('work_values');
+                if (data && data.length > 0) {
+                    // Transform to expected format
+                    const formatted = data.map(q => ({
+                        id: q.category?.toLowerCase().replace(' ', '_'), // e.g. achievement
+                        label: q.question_text,
+                        description: q.metadata?.description,
+                        icon: q.metadata?.icon,
+                        // Add color mapping if needed, or random
+                        color: 'from-blue-500 to-indigo-500' // Placeholder, could map based on id
+                    }));
 
-        if (currentQuestion < valueQuestions.length - 1) {
-            setCurrentQuestion(currentQuestion + 1);
-        } else {
-            // Module completed
-            const mission = getMissionById('work_values_deep');
-            completeModule('work_values_deep', mission.scoreIncrease);
-            setStep(4); // Return to home
-        }
+                    // Manual color mapping for aesthetics
+                    const colors = {
+                        achievement: 'from-blue-500 to-indigo-500',
+                        independence: 'from-indigo-500 to-purple-500',
+                        recognition: 'from-purple-500 to-pink-500',
+                        relationships: 'from-pink-500 to-rose-500',
+                        support: 'from-rose-500 to-orange-500',
+                        working_conditions: 'from-orange-500 to-amber-500'
+                    };
+
+                    // Fix IDs to match state keys if necessary (category in DB vs state key)
+                    // DB categories: Achievement, Independence, Recognition, Relationships, Support, Working Conditions
+                    // State keys: achievement, independence, recognition, relationships, support, working_conditions
+
+                    const mapped = formatted.map(d => ({
+                        ...d,
+                        id: d.id === 'working conditions' ? 'working_conditions' : d.id, // Handle space
+                        color: colors[d.id === 'working conditions' ? 'working_conditions' : d.id] || colors.achievement
+                    }));
+
+                    setDefinitions(mapped);
+                } else {
+                    // Fallback if no DB data
+                    console.warn("No work values found in DB");
+                }
+            } catch (err) {
+                console.error("Failed to fetch work values", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchDefinitions();
+    }, []);
+
+    const handleSliderChange = (id, val) => {
+        setValues(prev => ({ ...prev, [id]: parseInt(val) }));
     };
 
-    const progress = ((currentQuestion + 1) / valueQuestions.length) * 100;
+    const handleComplete = async () => {
+        // Save to store locally via setValue (existing action)
+        Object.entries(values).forEach(([key, val]) => {
+            setValue(key, val);
+        });
+
+        // Save to DB via service
+        if (user?.id) {
+            try {
+                await assessmentService.saveWorkValues(user.id, values);
+            } catch (err) {
+                console.error("Failed to save work values", err);
+            }
+        }
+
+        // Navigate to SCCT Scanner (Step 17) or Hub if standalone
+        // SCCT Scanner will then go to Auth (Step 4)
+        setStep(isStandalone ? 9 : 4);
+    };
+
+    if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
+                <p className="text-gray-500">Waarden laden...</p>
+            </div>
+        );
+    }
+
+    if (!started) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[80vh] px-6 text-center">
+                <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="bg-blue-100 p-6 rounded-full mb-6"
+                >
+                    <Scale className="w-12 h-12 text-blue-600" />
+                </motion.div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-4">Werkwaarden</h1>
+                <p className="text-gray-600 mb-8 max-w-sm">
+                    Wat vind jij écht belangrijk in je werk? Geef per onderdeel aan hoeveel waarde je eraan hecht.
+                </p>
+                <button
+                    onClick={() => setStarted(true)}
+                    className="w-full max-w-xs bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all transform hover:scale-105"
+                >
+                    Starten
+                </button>
+            </div>
+        );
+    }
 
     return (
-        <div className="max-w-md mx-auto px-4 py-8 pb-24">
+        <div className="max-w-md mx-auto px-4 py-8 pb-32 space-y-8 relative">
             {/* Header */}
-            <div className="mb-8">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-blue-100 p-3 rounded-xl">
-                        <Scale className="text-blue-600 w-6 h-6" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Werkwaarden Verdieping</h1>
-                        <p className="text-sm text-gray-500">Vraag {currentQuestion + 1} van {valueQuestions.length}</p>
-                    </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <motion.div
-                        className="h-full bg-gradient-to-r from-blue-500 to-cyan-500"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        transition={{ duration: 0.3 }}
-                    />
-                </div>
+            <div>
+                <h1 className="text-2xl font-bold text-gray-900">Jouw Werkwaarden</h1>
+                <p className="text-sm text-gray-500">Sleep de balken naar jouw voorkeur (1 = niet belangrijk, 10 = heel belangrijk)</p>
             </div>
 
-            {/* Question Card */}
+            {/* Sliders */}
+            <div className="space-y-6">
+                {definitions.map((val, idx) => (
+                    <motion.div
+                        key={val.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                        className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100"
+                    >
+                        <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                                <span>{val.icon}</span> {val.label}
+                            </h3>
+                            <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-lg text-xs font-bold font-mono">
+                                {values[val.id]} / 10
+                            </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                            {val.description}
+                        </p>
+
+                        <input
+                            type="range"
+                            min="1"
+                            max="100" // using 100 steps for smoothness, mapped to 1-10
+                            value={values[val.id] * 10}
+                            onChange={(e) => handleSliderChange(val.id, Math.ceil(e.target.value / 10))}
+                            className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb-blue"
+                            style={{
+                                backgroundImage: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${values[val.id] * 10}%, #e5e7eb ${values[val.id] * 10}%, #e5e7eb 100%)`
+                            }}
+                        />
+                    </motion.div>
+                ))}
+            </div>
+
+            {/* Complete Button */}
             <motion.div
-                key={currentQuestion}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="bg-white rounded-2xl p-6 shadow-lg mb-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.8 }}
+                className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-200 z-50 flex justify-center"
             >
-                <p className="text-xs uppercase tracking-wider text-blue-600 font-semibold mb-2">
-                    {valueQuestions[currentQuestion].label}
-                </p>
-                <h2 className="text-lg font-bold text-gray-900 mb-6">
-                    {valueQuestions[currentQuestion].question}
-                </h2>
-
-                <p className="text-sm text-gray-500 mb-4">Kies het scenario dat het beste bij je past:</p>
-
-                {/* Scenario Options */}
-                <div className="space-y-4">
-                    {valueQuestions[currentQuestion].scenarios.map((scenario, idx) => (
-                        <button
-                            key={idx}
-                            onClick={() => handleScenarioChoice(idx === 0)}
-                            className="w-full bg-gradient-to-br from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 border-2 border-blue-200 hover:border-blue-400 p-5 rounded-xl transition-all text-left group"
-                        >
-                            <div className="flex items-start gap-3">
-                                <div className="mt-1 w-6 h-6 rounded-full border-2 border-blue-400 group-hover:bg-blue-400 group-hover:border-blue-500 transition-all flex items-center justify-center">
-                                    <Check className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                                <p className="flex-1 font-medium text-gray-700 group-hover:text-blue-700 transition-colors">
-                                    {scenario}
-                                </p>
-                            </div>
-                        </button>
-                    ))}
-                </div>
+                <button
+                    onClick={handleComplete}
+                    className="w-full max-w-md bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                >
+                    Opslaan & Naar Resultaat <ArrowRight className="w-5 h-5" />
+                </button>
             </motion.div>
+
+            <style jsx>{`
+                .slider-thumb-blue::-webkit-slider-thumb {
+                    appearance: none;
+                    width: 20px;
+                    height: 20px;
+                    border-radius: 50%;
+                    background: white;
+                    border: 4px solid #3b82f6;
+                    cursor: pointer;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                }
+            `}</style>
+
+            {/* Scout Avatar */}
+            <div className="absolute -top-12 right-0">
+                <ScoutAvatar emotion="happy" className="scale-75 origin-bottom-right" />
+            </div>
         </div>
     );
 };

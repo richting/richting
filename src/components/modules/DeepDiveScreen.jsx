@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore';
 import { supabase } from '../../lib/supabase';
 import { calculateSectorMatchesEnhanced } from '../../utils/matchingEngine';
 import { ArrowLeft, Lock, Briefcase, TrendingUp, Users, CheckCircle2 } from 'lucide-react';
-import UnlockModal from './UnlockModal';
+
 
 const DeepDiveScreen = () => {
     const {
@@ -15,13 +15,14 @@ const DeepDiveScreen = () => {
         reliabilityScore,
         isPremium,
         setPremium,
-        setSelectedCareerDirection
+        setSelectedCareerDirection,
+        selfEfficacy
     } = useStore();
 
     const [sector, setSector] = useState(null);
     const [careers, setCareers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [showUnlockModal, setShowUnlockModal] = useState(false);
+
 
     useEffect(() => {
         const fetchSectorDetails = async () => {
@@ -31,17 +32,30 @@ const DeepDiveScreen = () => {
                 const { data: sectorsData, error: sectorsError } = await supabase.from('sectors').select('*');
                 if (sectorsError) throw sectorsError;
 
-                // Fetch careers for enhanced matching
-                const { data: careersData, error: careersError } = await supabase.from('careers').select('*');
-                if (careersError) throw careersError;
+                // Fetch ESCO occupations (replacing 'careers')
+                // We only want mapped occupations (where riasec_vector is not null)
+                const { data: escoData, error: escoError } = await supabase
+                    .from('esco_occupations')
+                    .select('*')
+                    .not('riasec_vector', 'is', null)
+                    .limit(1000);
+
+                if (escoError) throw escoError;
+
+                const mappedCareers = (escoData || []).map(job => ({
+                    ...job,
+                    title: job.title_nl,
+                    description: job.description_nl,
+                }));
 
                 const results = await calculateSectorMatchesEnhanced(
                     userScores,
                     userValues,
                     sectorsData || [],
-                    careersData || [],
+                    mappedCareers,
                     personalityVector,
-                    reliabilityScore
+                    reliabilityScore,
+                    selfEfficacy
                 );
 
                 let targetSector = null;
@@ -59,13 +73,21 @@ const DeepDiveScreen = () => {
                 // Fetch careers within this sector
                 if (targetSector) {
                     const { data: careersData, error: careersError } = await supabase
-                        .from('careers')
+                        .from('esco_occupations')
                         .select('*')
                         .eq('sector_id', targetSector.id)
-                        .limit(10);
+                        .limit(20);
 
                     if (careersError) throw careersError;
-                    setCareers(careersData || []);
+
+                    // Map for display
+                    const displayCareers = (careersData || []).map(job => ({
+                        ...job,
+                        title: job.title_nl,
+                        education_level: 'MBO/HBO/WO' // Placeholder as ESCO doesn't provided this directly yet
+                    }));
+
+                    setCareers(displayCareers);
                 }
 
             } catch (error) {
@@ -76,19 +98,10 @@ const DeepDiveScreen = () => {
         };
 
         fetchSectorDetails();
-    }, [selectedSectorId, userScores, userValues, personalityVector, reliabilityScore]);
+        fetchSectorDetails();
+    }, [selectedSectorId, userScores, userValues, personalityVector, reliabilityScore, selfEfficacy]);
 
-    const handleUnlock = () => {
-        setPremium(true);
-        setShowUnlockModal(false);
-    };
 
-    const handleCareerClick = () => {
-        if (!isPremium) {
-            setShowUnlockModal(true);
-        }
-        // If premium, could navigate to individual career detail page (future feature)
-    };
 
     if (loading) {
         return <div className="p-8 text-center text-gray-500">Laden...</div>;
@@ -98,7 +111,7 @@ const DeepDiveScreen = () => {
         return (
             <div className="p-8 text-center text-gray-500">
                 Geen sector gevonden.
-                <button onClick={() => setStep(6)} className="block mx-auto mt-4 text-blue-600 font-bold">Terug naar Matches</button>
+                <button onClick={() => setStep(8)} className="block mx-auto mt-4 text-blue-600 font-bold">Terug naar Matches</button>
             </div>
         );
     }
@@ -108,13 +121,13 @@ const DeepDiveScreen = () => {
             {/* Sticky Back Button */}
             <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur-sm py-2 mb-4 flex items-center justify-between">
                 <button
-                    onClick={() => setStep(6)}
+                    onClick={() => setStep(8)}
                     className="flex items-center text-gray-600 hover:text-blue-600 font-medium"
                 >
                     <ArrowLeft size={20} className="mr-1" />
                     Terug
                 </button>
-                {!isPremium && <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Gratis preview</span>}
+
             </div>
 
             {/* Header Image/Icon */}
@@ -210,75 +223,31 @@ const DeepDiveScreen = () => {
                 </div>
 
                 <p className="text-sm text-gray-600 mb-4">
-                    {isPremium
-                        ? `Ontdek ${careers.length} verschillende beroepen binnen ${sector.name_nl}`
-                        : 'Upgrade naar premium om alle specifieke beroepen binnen deze sector te bekijken'}
+                    Ontdek {careers.length} verschillende beroepen binnen {sector.name_nl}
                 </p>
 
                 {/* Careers List */}
                 <div className="space-y-3 relative">
-                    {isPremium ? (
-                        // Premium: Show full career list
-                        careers.map((career, idx) => (
-                            <div
-                                key={idx}
-                                onClick={handleCareerClick}
-                                className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl border border-purple-100 hover:border-purple-300 transition-all cursor-pointer"
-                            >
-                                <span className="font-bold text-purple-800 text-sm bg-white w-6 h-6 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">
-                                    {idx + 1}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                    <span className="text-purple-900 font-medium text-sm block truncate">{career.title}</span>
-                                    <span className="text-xs text-purple-600">{career.education_level || 'MBO/HBO/WO'}</span>
-                                </div>
+                    {careers.map((career, idx) => (
+                        <div
+                            key={idx}
+                            // onClick={handleCareerClick} // Removed handler
+                            className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl border border-purple-100 hover:border-purple-300 transition-all cursor-pointer"
+                        >
+                            <span className="font-bold text-purple-800 text-sm bg-white w-6 h-6 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">
+                                {idx + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                                <span className="text-purple-900 font-medium text-sm block truncate">{career.title}</span>
+                                <span className="text-xs text-purple-600">{career.education_level || 'MBO/HBO/WO'}</span>
                             </div>
-                        ))
-                    ) : (
-                        // Free: Show blurred placeholders with paywall
-                        <>
-                            {careers.slice(0, 5).map((career, idx) => (
-                                <div
-                                    key={idx}
-                                    onClick={handleCareerClick}
-                                    className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl border border-purple-100 blur-sm select-none cursor-pointer"
-                                >
-                                    <span className="font-bold text-purple-800 text-sm bg-white w-6 h-6 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">
-                                        {idx + 1}
-                                    </span>
-                                    <div className="flex-1">
-                                        <div className="h-4 bg-purple-200 rounded w-3/4 mb-1" />
-                                        <div className="h-3 bg-purple-200 rounded w-1/2" />
-                                    </div>
-                                </div>
-                            ))}
-
-                            {/* Paywall overlay */}
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-transparent via-white/90 to-white pt-8">
-                                <div className="bg-white p-4 rounded-full shadow-lg mb-4">
-                                    <Lock className="text-purple-600" size={24} />
-                                </div>
-                                <h4 className="font-bold text-gray-900 mb-2">Unlock {careers.length} beroepen</h4>
-                                <p className="text-sm text-gray-500 mb-4 text-center max-w-xs">
-                                    Ontdek alle specifieke beroepen en welke bij jou passen
-                                </p>
-                                <button
-                                    onClick={handleCareerClick}
-                                    className="bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
-                                >
-                                    Upgrade - €2,99
-                                </button>
-                            </div>
-                        </>
-                    )}
+                        </div>
+                    ))
+                    }
                 </div>
             </div>
 
-            <UnlockModal
-                isOpen={showUnlockModal}
-                onClose={() => setShowUnlockModal(false)}
-                onUpgrade={handleUnlock}
-            />
+
         </div>
     );
 };

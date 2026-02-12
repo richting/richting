@@ -5,7 +5,7 @@ import { User, Shield, CreditCard, LogOut, CheckCircle, Lock, Map, RotateCcw, Tr
 import { motion, AnimatePresence } from 'framer-motion';
 
 const ProfileScreen = () => {
-    const { user, userScores, completedModules, isPremium, setPremium, logout, setStep, resetModule } = useStore();
+    const { user, userScores, completedModules, logout, setStep, resetModule } = useStore();
     const [resetting, setResetting] = useState(null); // Track which ID is being reset
     const [isDataOpen, setIsDataOpen] = useState(false); // Unified accordion state
 
@@ -14,7 +14,10 @@ const ProfileScreen = () => {
         'swipes': 1,
         'dilemmas': 2,
         'values': 10,
-        'bigfive': 13
+        'practice_validation': 11,
+        'career_practice': 12,
+        'bigfive': 13,
+        'validation_results': 15
     };
 
     const COMPLETION_MAPPING = {
@@ -22,6 +25,9 @@ const ProfileScreen = () => {
         'swipes': 'onboarding_swipes',
         'dilemmas': 'dilemmas',
         'values': 'work_values_deep',
+        'practice_validation': 'practice_validation',
+        'career_practice': 'career_practice',
+        'validation_results': 'career_practice', // Linked to career practice
         'bigfive': 'personality'
     };
 
@@ -98,7 +104,10 @@ const ProfileScreen = () => {
         { id: 'onboarding', label: 'Onboarding' },
         { id: 'swipes', label: 'Interesse Test (Swipes)' },
         { id: 'dilemmas', label: 'Dilemma Slider' },
-        { id: 'values', label: 'Waarden Test (Premium)' },
+        { id: 'values', label: 'Work Values Deep' },
+        { id: 'practice_validation', label: 'Practice Validation' },
+        { id: 'career_practice', label: 'Career Practice' },
+        { id: 'validation_results', label: 'Validation Results' },
         { id: 'bigfive', label: 'Persoonlijkheid (Big 5)' }
     ];
 
@@ -271,32 +280,9 @@ const ProfileScreen = () => {
                     </div>
                 </div>
 
-                {!isPremium && (
-                    <button
-                        onClick={() => setPremium(true)}
-                        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors border-b border-gray-100 text-left group"
-                    >
-                        <div className="flex items-center space-x-3">
-                            <CreditCard className="text-blue-500 w-5 h-5" />
-                            <div className="flex flex-col">
-                                <span className="text-sm font-medium text-gray-900">Upgrade naar Premium</span>
-                                <span className="text-xs text-gray-500">Ontgrendel alle resultaten</span>
-                            </div>
-                        </div>
-                        <span className="text-blue-600 text-sm font-bold group-hover:translate-x-1 transition-transform">€2,99</span>
-                    </button>
-                )}
 
-                <div className="flex items-center justify-between p-4 border-b border-gray-100">
-                    <div className="flex items-center space-x-3">
-                        <Shield className="text-gray-400 w-5 h-5" />
-                        <span className="text-sm font-medium text-gray-700">Debug Premium</span>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" checked={isPremium} onChange={(e) => setPremium(e.target.checked)} className="sr-only peer" />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
+
+
 
 
                 <button

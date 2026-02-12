@@ -37,7 +37,7 @@ export const swipeCards = [
     description: "Strategie bepalen en anderen motiveren om doelen te bereiken",
     tag: "E",
     emoji: "📊",
-    gradient: "from-yellow-400 to-orange-500"
+    gradient: "from-orange-400 to-orange-600"
   },
   {
     id: 6,
@@ -77,7 +77,7 @@ export const swipeCards = [
     description: "Kennis overdragen en jonge mensen begeleiden",
     tag: "S",
     emoji: "👨‍🏫",
-    gradient: "from-amber-400 to-yellow-500"
+    gradient: "from-orange-400 to-yellow-600"
   },
   {
     id: 11,

@@ -3,11 +3,10 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Lock, Sparkles } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { getNextMission, MISSION_STEP_MAP } from '../../data/missionData';
-import UnlockModal from './UnlockModal';
+
 
 const NextMission = () => {
-    const { completedModules, isPremium, reliabilityScore, setStep, setPremium } = useStore();
-    const [showUnlockModal, setShowUnlockModal] = useState(false);
+    const { completedModules, reliabilityScore, setStep } = useStore();
 
     const nextMission = getNextMission(completedModules);
 
@@ -17,18 +16,11 @@ const NextMission = () => {
     }
 
     const handleMissionClick = () => {
-        if (nextMission.isPremium && !isPremium) {
-            setShowUnlockModal(true);
-        } else {
-            // Navigate to the mission module
-            setStep(MISSION_STEP_MAP[nextMission.id]);
-        }
+        // Navigate to the mission module
+        setStep(MISSION_STEP_MAP[nextMission.id]);
     };
 
-    const handleUpgrade = () => {
-        setPremium(true);
-        setShowUnlockModal(false);
-    };
+
 
     return (
         <>
@@ -49,12 +41,6 @@ const NextMission = () => {
                             <Sparkles className="text-blue-600 w-5 h-5" />
                             <h3 className="font-bold text-gray-900">Volgende Module</h3>
                         </div>
-                        {nextMission.isPremium && (
-                            <div className="flex items-center gap-1 bg-gradient-to-r from-yellow-400 to-orange-400 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
-                                <Lock size={12} />
-                                Premium
-                            </div>
-                        )}
                     </div>
 
                     {/* Mission Content */}
@@ -86,11 +72,7 @@ const NextMission = () => {
                 </div>
             </motion.div>
 
-            <UnlockModal
-                isOpen={showUnlockModal}
-                onClose={() => setShowUnlockModal(false)}
-                onUpgrade={handleUpgrade}
-            />
+
         </>
     );
 };

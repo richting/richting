@@ -5,7 +5,7 @@ import { loadUserData } from './utils/syncUserData';
 import { useBrowserNavigation } from './hooks/useBrowserNavigation'; // Import hook
 import Onboarding from './components/modules/Onboarding';
 import VibeSwipe from './components/modules/VibeSwipe';
-import DilemmaSlider from './components/modules/DilemmaSlider';
+// DilemmaSlider removed
 import AuthScreen from './components/modules/AuthScreen';
 
 import HomeScreen from './components/modules/HomeScreen';
@@ -16,12 +16,11 @@ import TestHub from './components/modules/TestHub';
 import PersonalityQuiz from './components/modules/PersonalityQuiz';
 import CapabilitiesModule from './components/modules/CapabilitiesModule';
 import WorkValuesDeepModule from './components/modules/WorkValuesDeepModule';
-import PracticeValidationModule from './components/modules/PracticeValidationModule';
-import CareerPracticeValidation from './components/modules/CareerPracticeValidation';
-import PracticeValidationResults from './components/modules/PracticeValidationResults';
+import SCCTScanner from './components/modules/SCCTScanner';
+// AuthScreen already imported above
+// HomeScreen already imported above
 import ScreenFlowMap from './components/debug/ScreenFlowMap'; // DEV ONLY
-// import ResultsDashboard from './components/modules/ResultsDashboard';
-// import AccountScreen from './components/modules/AccountScreen';
+
 import BottomNav from './components/modules/BottomNav';
 import { Map } from 'lucide-react';
 import './App.css';
@@ -29,7 +28,7 @@ import './App.css';
 import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
-  const { currentStep, user, login, setStep } = useStore();
+  const { currentStep, user, login, setStep, initializeFromBackup } = useStore();
 
   // Enable browser back/forward buttons
   useBrowserNavigation();
@@ -37,6 +36,9 @@ function App() {
   // Check for existing auth session on app load
   useEffect(() => {
     const checkAuth = async () => {
+      // FIRST: Try to restore from localStorage backup (for anonymous users)
+      initializeFromBackup();
+
       const { data: { session } } = await supabase.auth.getSession();
 
       if (session?.user) {
@@ -62,14 +64,14 @@ function App() {
             id: session.user.id,
             name: profile.name,
             email: profile.email,
-            isPremium: profile.is_premium
+            isPremium: true // Force premium for everyone as per request
           }, userData);
 
           // If user has progress, navigate to HomeScreen instead of staying on Onboarding
           // This happens when the page is refreshed or user returns to the app
           if (userData?.progress?.reliabilityScore > 0) {
             // Note: login() will set currentStep from userData.progress.currentStep
-            // But if that's 0, we should go to 4 (HomeScreen)
+            // But if that's 0, we should go to 5 (HomeScreen)
             // The login action already handles this via loadedData.progress.currentStep
           }
         }
@@ -92,39 +94,48 @@ function App() {
     return () => subscription.unsubscribe();
   }, [login, setStep]);
 
-  // Prevent authenticated users from accessing onboarding screens (steps 0-2)
+  // Prevent authenticated users from accessing onboarding screens (steps 0-4)
   useEffect(() => {
-    if (user && currentStep >= 0 && currentStep <= 2) {
+    if (user && currentStep >= 0 && currentStep <= 4) {
       // User is logged in but trying to access onboarding - redirect to home
-      setStep(4);
+      setStep(5);
     }
   }, [user, currentStep, setStep]);
 
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 text-gray-900 font-sans selection:bg-blue-100">
+        {/* Onboarding Flow */}
         {currentStep === 0 && <Onboarding />}
         {currentStep === 1 && <VibeSwipe />}
-        {currentStep === 2 && <DilemmaSlider />}
-        {currentStep === 3 && <AuthScreen />}
+        {currentStep === 2 && <PersonalityQuiz />}
+        {currentStep === 3 && <WorkValuesDeepModule />}
+        {currentStep === 4 && <SCCTScanner />}
+        {currentStep === 5 && <AuthScreen />}
 
-        {currentStep === 4 && <HomeScreen />}
-        {currentStep === 5 && <ProfileScreen />}
-        {currentStep === 6 && <MatchesScreen />}
-        {currentStep === 7 && <DeepDiveScreen />}
-        {currentStep === 8 && <TestHub />}
+        {/* Main App */}
+        {currentStep === 6 && <HomeScreen />}
+        {currentStep === 7 && <ProfileScreen />}
+        {currentStep === 8 && <MatchesScreen />}
+        {currentStep === 9 && <DeepDiveScreen />}
+        {currentStep === 10 && <TestHub />}
 
-        {/* Mission Modules */}
-        {currentStep === 10 && <WorkValuesDeepModule />}
+        {/* Additional Modules (accessed via Hub or Flow) */}
+        {/* Note: WorkValuesDeep and PersonalityQuiz are now also in main flow at 2/3 */}
+        {/* But we might keep them accessible here if users want to re-take? */}
+        {/* Actually, let's keep unique IDs for steps to avoid confusion */}
+        {/* If user re-takes from Hub, do they go to 2/3? Yes, that works. */}
+
         {currentStep === 11 && <PracticeValidationModule />}
         {currentStep === 12 && <CareerPracticeValidation />}
 
-        {/* Test Modules (Premium) */}
-        {currentStep === 13 && <PersonalityQuiz />}
-        {currentStep === 14 && <CapabilitiesModule />}
-        {currentStep === 15 && <PracticeValidationResults />}
-
-
+        {/* Premium Test Modules */}
+        {currentStep === 13 && <WorkValuesDeepModule isStandalone={true} />}
+        {currentStep === 14 && <PersonalityQuiz isStandalone={true} />}
+        {currentStep === 15 && <CapabilitiesModule />}
+        {currentStep === 16 && <PracticeValidationResults />}
+        {currentStep === 17 && <DailyBooster />}
+        {currentStep === 18 && <SCCTScanner isStandalone={true} />}
 
         {/* DEV ONLY: Screen Flow Map */}
         {currentStep === 99 && <ScreenFlowMap />}

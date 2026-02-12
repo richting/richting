@@ -1,17 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { calculateSectorMatchesEnhanced, getVisibleMatches } from '../../utils/matchingEngine';
+import { calculateSectorMatchesEnhanced } from '../../utils/matchingEngine';
 import { supabase } from '../../lib/supabase';
 import ProgressCircle from './ProgressCircle';
-import ActivitySwipe from './ActivitySwipe';
+import DailyBooster from './DailyBooster';
 import NextMission from './NextMission';
-import { ArrowRight, Lock, Loader2 } from 'lucide-react';
+import Scout from '../ui/Scout';
+import { useScout } from '../../hooks/useScout';
+import { scoutMessages } from '../../utils/scoutMessages';
+import { ArrowRight, Loader2 } from 'lucide-react';
 
 const HomeScreen = () => {
-    const { userScores, userValues, personalityVector, reliabilityScore, isPremium, user, setStep, setSelectedSectorId } = useStore();
-    const [matches, setMatches] = useState([]);
+    const { userScores, userValues, personalityVector, reliabilityScore, user, setStep, setSelectedSectorId, selfEfficacy } = useStore();
     const [loading, setLoading] = useState(true);
     const [topMatch, setTopMatch] = useState(null);
+    const { say, setReliability } = useScout();
+
+    // Sync reliability score with Scout
+    useEffect(() => {
+        setReliability(reliabilityScore);
+    }, [reliabilityScore, setReliability]);
+
+    // Welcome message on first load
+    useEffect(() => {
+        say(scoutMessages.home.welcome, 'happy');
+    }, [say]);
 
     useEffect(() => {
         const fetchSectorsAndCareers = async () => {
@@ -20,21 +33,34 @@ const HomeScreen = () => {
                 const { data: sectorsData, error: sectorsError } = await supabase.from('sectors').select('*');
                 if (sectorsError) throw sectorsError;
 
-                // Fetch careers for enhanced matching
-                const { data: careersData, error: careersError } = await supabase.from('careers').select('*');
-                if (careersError) throw careersError;
+                // Fetch ESCO occupations (replacing 'careers')
+                // We only want mapped occupations (where riasec_vector is not null)
+                const { data: escoData, error: escoError } = await supabase
+                    .from('esco_occupations')
+                    .select('*')
+                    .not('riasec_vector', 'is', null)
+                    .limit(1000); // Limit for performance
+
+                if (escoError) throw escoError;
+
+                // Map ESCO data to expected format for matching engine
+                const mappedCareers = (escoData || []).map(job => ({
+                    ...job,
+                    title: job.title_nl,
+                    description: job.description_nl,
+                }));
 
                 // Use enhanced matching with career aggregation
                 const results = await calculateSectorMatchesEnhanced(
                     userScores,
                     userValues,
                     sectorsData || [],
-                    careersData || [],
+                    mappedCareers,
                     personalityVector,
-                    reliabilityScore
+                    reliabilityScore,
+                    selfEfficacy
                 );
 
-                setMatches(results);
                 if (results.length > 0) {
                     setTopMatch(results[0]);
                 }
@@ -45,10 +71,13 @@ const HomeScreen = () => {
             }
         };
         fetchSectorsAndCareers();
-    }, [userScores, userValues, personalityVector, reliabilityScore]);
+    }, [userScores, userValues, personalityVector, reliabilityScore, selfEfficacy]);
 
     return (
         <div className="max-w-md mx-auto px-4 py-8 pb-24">
+            {/* Scout Mascot */}
+            <Scout />
+
             {/* Header */}
             <div className="text-center mb-8">
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -67,14 +96,10 @@ const HomeScreen = () => {
                 <NextMission />
             </div>
 
-            {/* Daily Swipe Activity - Replaces DailyBooster */}
+            {/* Daily Booster (Dilemmas) */}
             {reliabilityScore >= 0 && reliabilityScore < 100 && (
                 <div className="mb-8">
-                    <div className="flex items-center justify-between mb-4 px-1">
-                        <h3 className="font-bold text-gray-900 text-lg">Dagelijkse Match</h3>
-                        <ActivitySwipe.Counter />
-                    </div>
-                    <ActivitySwipe />
+                    <DailyBooster />
                 </div>
             )}
 
@@ -88,7 +113,7 @@ const HomeScreen = () => {
                     </div>
                 ) : topMatch ? (
                     <div
-                        onClick={() => { setSelectedSectorId(topMatch.id); setStep(7); }} // Direct to Deep Dive for top sector
+                        onClick={() => { setSelectedSectorId(topMatch.id); setStep(9); }} // Direct to Deep Dive for top sector (Step 9)
                         className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center justify-between cursor-pointer group hover:border-blue-200 transition-all"
                     >
                         <div className="flex items-center gap-4">

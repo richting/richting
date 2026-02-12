@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Brain, Zap, Lock, ArrowRight, Crown } from 'lucide-react';
+import { Brain, Zap, Lock, ArrowRight, Crown, Briefcase } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 const TestHub = () => {
@@ -8,12 +8,11 @@ const TestHub = () => {
 
     const personalityCompleted = completedModules.includes('personality');
     const capabilitiesCompleted = completedModules.includes('capabilities');
+    const valuesCompleted = completedModules.includes('work_values_deep');
+
 
     const handleTestClick = (testStep, requiresPremium, requiresPersonality = false) => {
-        if (!isPremium && requiresPremium) {
-            // Show premium modal or message
-            return;
-        }
+        // Premium check removed
         if (requiresPersonality && !personalityCompleted) {
             // Don't navigate - test is locked
             return;
@@ -21,39 +20,7 @@ const TestHub = () => {
         setStep(testStep);
     };
 
-    if (!isPremium) {
-        return (
-            <div className="max-w-md mx-auto px-4 py-8 pb-24">
-                {/* Premium Gate */}
-                <div className="text-center mb-8">
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Testcentrum</h1>
-                    <p className="text-gray-500">Ontgrendel premium voor toegang</p>
-                </div>
 
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-gradient-to-br from-yellow-50 via-orange-50 to-yellow-50 rounded-2xl p-8 shadow-lg border-2 border-yellow-200"
-                >
-                    <div className="text-center">
-                        <div className="bg-gradient-to-r from-yellow-400 to-orange-400 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Crown className="text-white w-8 h-8" />
-                        </div>
-                        <h2 className="text-xl font-bold text-gray-900 mb-2">Premium Module</h2>
-                        <p className="text-gray-600 mb-6">
-                            Krijg toegang tot geavanceerde persoonlijkheids- en capaciteitentests om je profiel te verbeteren.
-                        </p>
-                        <button
-                            onClick={() => {/* TODO: Implement upgrade flow */ }}
-                            className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold px-6 py-3 rounded-xl shadow-md hover:shadow-lg transition-all"
-                        >
-                            Upgrade naar Premium
-                        </button>
-                    </div>
-                </motion.div>
-            </div>
-        );
-    }
 
     return (
         <div className="max-w-md mx-auto px-4 py-8 pb-24">
@@ -64,8 +31,10 @@ const TestHub = () => {
             </div>
 
             {/* Test Cards */}
+            {/* Test Cards */}
             <div className="space-y-4">
-                {/* Personality Test Card */}
+
+                {/* 1. Personality Test Card */}
                 <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -101,7 +70,42 @@ const TestHub = () => {
                     </div>
                 </motion.div>
 
-                {/* Capabilities Quiz Card */}
+                {/* 2. Work Values Deep Module (Step 10) */}
+                <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 }}
+                    onClick={() => handleTestClick(10, true)}
+                    className={`bg-white rounded-2xl p-6 shadow-md border-2 transition-all cursor-pointer group ${valuesCompleted
+                        ? 'border-green-200 bg-green-50/50'
+                        : 'border-purple-200 hover:border-purple-400 hover:shadow-lg'
+                        }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${valuesCompleted
+                                ? 'bg-green-100'
+                                : 'bg-purple-100'
+                                }`}>
+                                <Briefcase className={`w-7 h-7 ${valuesCompleted ? 'text-green-600' : 'text-purple-600'}`} />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-gray-900 mb-1">
+                                    Work Values Deep
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                    {valuesCompleted ? '✓ Voltooid' : 'Ontdek wat jou drijft'}
+                                </p>
+                            </div>
+                        </div>
+                        <ArrowRight className={`w-6 h-6 transition-transform ${valuesCompleted
+                            ? 'text-green-400'
+                            : 'text-purple-400 group-hover:translate-x-1'
+                            }`} />
+                    </div>
+                </motion.div>
+
+                {/* 3. Capabilities Quiz Card */}
                 <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -162,12 +166,37 @@ const TestHub = () => {
                         </div>
                     )}
                 </motion.div>
+                {/* 4. Daily Booster Card */}
+                <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 }}
+                    onClick={() => handleTestClick(16, true)}
+                    className="bg-white rounded-2xl p-6 shadow-md border-2 border-yellow-200 hover:border-yellow-400 hover:shadow-lg transition-all cursor-pointer group"
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-xl flex items-center justify-center bg-yellow-100">
+                                <Zap className="w-7 h-7 text-yellow-600" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-gray-900 mb-1">
+                                    Dagelijkse Booster
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                    Verhoog je betrouwbaarheid
+                                </p>
+                            </div>
+                        </div>
+                        <ArrowRight className="w-6 h-6 text-yellow-500 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                </motion.div>
             </div>
 
             {/* Info Section */}
             <div className="mt-8 bg-blue-50 rounded-xl p-4 border border-blue-100">
                 <p className="text-sm text-gray-600 text-center">
-                    💡 Beide modules verhogen je betrouwbaarheidsscore en verbeteren je matches
+                    💡 Alle modules verhogen je betrouwbaarheidsscore en verbeteren je matches
                 </p>
             </div>
         </div>

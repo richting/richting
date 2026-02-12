@@ -1,305 +1,191 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Brain, Loader2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { getMissionById } from '../../data/missionData';
-import UnlockModal from './UnlockModal';
+import { assessmentService } from '../../services/assessmentService';
+import Scout from '../ui/Scout';
+import { useScout } from '../../hooks/useScout';
+import { scoutMessages } from '../../utils/scoutMessages';
+import LikertScale from '../assessments/LikertScale';
+import ProgressBar from '../assessments/ProgressBar';
 
-const PersonalityQuiz = () => {
-    const { isPremium, completeModule, setStep, setPersonalityVector } = useStore();
-    const [currentQuestion, setCurrentQuestion] = useState(0);
-    const [showUnlock, setShowUnlock] = useState(!isPremium);
-    const [answers, setAnswers] = useState({});
-    const [sliderValue, setSliderValue] = useState(50); // 0-100, 50 is neutral
+const PersonalityQuiz = ({ isStandalone = false }) => {
+    const { setStep, user } = useStore();
+    const [questions, setQuestions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+    const [answers, setAnswers] = useState({}); // { questionId: value }
+    const { say, celebrate } = useScout();
 
-    // 10 Personality Dilemmas based on Big Five
-    const dilemmas = [
-        {
-            id: 1,
-            factor: 'extraversion',
-            leftOption: 'Ik werk het liefst geconcentreerd in m\'n eentje.',
-            rightOption: 'Ik krijg energie van brainstormen in een groep.',
-            insight: 'Focus vs. Interactie'
-        },
-        {
-            id: 2,
-            factor: 'conscientiousness',
-            leftOption: 'Ik improviseer graag en zie wel waar het schip strandt.',
-            rightOption: 'Ik hou van lijstjes, schema\'s en een strakke planning.',
-            insight: 'Flexibiliteit vs. Structuur'
-        },
-        {
-            id: 3,
-            factor: 'openness',
-            leftOption: 'Ik hou van bewezen methodes die altijd werken.',
-            rightOption: 'Ik ben altijd op zoek naar een nieuwe, creatieve aanpak.',
-            insight: 'Behoudend vs. Innovatief'
-        },
-        {
-            id: 4,
-            factor: 'agreeableness',
-            leftOption: 'Ik zeg direct waar het op staat, ook als dat schuurt.',
-            rightOption: 'Ik pas me aan de groep aan om de sfeer goed te houden.',
-            insight: 'Taakgericht vs. Mensgericht'
-        },
-        {
-            id: 5,
-            factor: 'stability',
-            leftOption: 'Onder hoge druk word ik sneller onrustig.',
-            rightOption: 'Hoe groter de chaos, hoe kalmer ik blijf.',
-            insight: 'Stressgevoeligheid vs. Veerkracht'
-        },
-        {
-            id: 6,
-            factor: 'extraversion',
-            leftOption: 'Ik luister en observeer liever eerst in een vergadering.',
-            rightOption: 'Ik neem vaak het voortouw in een gesprek.',
-            insight: 'Volgend vs. Leidend'
-        },
-        {
-            id: 7,
-            factor: 'conscientiousness',
-            leftOption: 'Ik focus op het grote plaatje, de details komen later wel.',
-            rightOption: 'Ik word gelukkig van een resultaat dat tot in de puntjes klopt.',
-            insight: 'Visionair vs. Specialist'
-        },
-        {
-            id: 8,
-            factor: 'openness',
-            leftOption: 'Ik verdiep me liever in één specifiek onderwerp.',
-            rightOption: 'Ik ben breed geïnteresseerd in heel veel verschillende dingen.',
-            insight: 'Diepgang vs. Breedte'
-        },
-        {
-            id: 9,
-            factor: 'agreeableness',
-            leftOption: 'Ik vaar mijn eigen koers, ongeacht wat anderen denken.',
-            rightOption: 'Ik vind het belangrijk dat anderen mijn werk waarderen.',
-            insight: 'Autonoom vs. Coöperatief'
-        },
-        {
-            id: 10,
-            factor: 'stability',
-            leftOption: 'Ik denk vaak lang na over gemaakte fouten.',
-            rightOption: 'Ik laat tegenslagen snel achter me en kijk weer vooruit.',
-            insight: 'Reflectief vs. Pragmatisch'
+    useEffect(() => {
+        const fetchQuestions = async () => {
+            try {
+                const data = await assessmentService.getQuestions('big5');
+                // Transform to match expected format if needed, but data from DB should be fine
+                // DB has: id, question_text, metadata: { reverse: bool, category: string }
+                // We map category to dimension
+                const formatted = data.map(q => ({
+                    id: q.id,
+                    text: q.question_text,
+                    dimension: q.category?.toLowerCase() || 'unknown',
+                    isReverse: q.metadata?.reverse || false
+                }));
+                setQuestions(formatted);
+
+                // Welcome message
+                say(scoutMessages.bigFive.start, 'happy');
+            } catch (error) {
+                console.error("Failed to load Big5 questions", error);
+                say("Oeps, ik kan de vragen niet laden! 🙈", 'neutral');
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchQuestions();
+    }, [say]);
+
+    const currentQuestion = questions[currentQuestionIndex];
+
+    // Handle Answer Selection
+    const handleAnswer = (value) => {
+        // Save answer locally
+        setAnswers(prev => ({ ...prev, [currentQuestion.id]: value }));
+
+        // Scout Feedback intervals
+        const nextIndex = currentQuestionIndex + 1;
+        if (nextIndex === 5) {
+            say(scoutMessages.bigFive.question_5, 'thinking');
+        } else if (nextIndex === 10) {
+            say(scoutMessages.bigFive.question_10, 'encouraging');
+        } else if (nextIndex === 15) {
+            say(scoutMessages.bigFive.question_15, 'happy');
+        } else if (nextIndex === 20) {
+            say(scoutMessages.bigFive.question_20, 'thinking');
         }
-    ];
 
-    const currentDilemma = dilemmas[currentQuestion];
-    const progress = ((currentQuestion + 1) / dilemmas.length) * 100;
-
-    // Convert slider value (0-100) to score (-10 to +10)
-    // 0 = strongly left (-10), 50 = neutral (0), 100 = strongly right (+10)
-    const convertSliderToScore = (value) => {
-        return ((value - 50) / 5); // Maps 0-100 to -10 to +10
-    };
-
-    const handleSliderChange = (e) => {
-        setSliderValue(Number(e.target.value));
-    };
-
-    const handleOptionClick = (side) => {
-        // Clicking left sets slider to 0, clicking right sets to 100
-        const newValue = side === 'left' ? 0 : 100;
-        setSliderValue(newValue);
-
-        // Auto-advance after a short delay
-        setTimeout(() => {
-            handleNext(newValue);
-        }, 300);
-    };
-
-    const handleNext = (valueToUse = sliderValue) => {
-        const score = convertSliderToScore(valueToUse);
-        const newAnswers = { ...answers, [currentDilemma.factor]: (answers[currentDilemma.factor] || 0) + score };
-        setAnswers(newAnswers);
-
-        if (currentQuestion < dilemmas.length - 1) {
-            setCurrentQuestion(currentQuestion + 1);
-            setSliderValue(50); // Reset slider to neutral
+        // Next Question or Finish
+        if (currentQuestionIndex < questions.length - 1) {
+            setTimeout(() => {
+                setCurrentQuestionIndex(prev => prev + 1);
+            }, 300); // Short delay for visual feedback
         } else {
-            // Quiz completed - calculate final personality vector
-            const personalityVector = {
-                extraversion: newAnswers.extraversion || 0,
-                conscientiousness: newAnswers.conscientiousness || 0,
-                openness: newAnswers.openness || 0,
-                agreeableness: newAnswers.agreeableness || 0,
-                stability: newAnswers.stability || 0
-            };
-
-            // Save to store
-            setPersonalityVector(personalityVector);
-
-            // Complete module with 50% score increase
-            const mission = getMissionById('personality');
-            completeModule('personality', mission.scoreIncrease);
-
-            // Return to TestHub
-            setStep(8);
+            finishQuiz({ ...answers, [currentQuestion.id]: value });
         }
     };
 
-    const handleUpgrade = () => {
-        // This would trigger payment flow in production
-        console.log('Upgrade to premium clicked');
-        setShowUnlock(false);
+    const finishQuiz = async (finalAnswers) => {
+        // Calculate Scores
+        const scores = {
+            openness: 0,
+            conscientiousness: 0,
+            extraversion: 0,
+            agreeableness: 0,
+            stability: 0
+        };
+
+        questions.forEach(q => {
+            const val = finalAnswers[q.id];
+            const score = q.isReverse ? (6 - val) : val;
+            if (scores[q.dimension] !== undefined) {
+                scores[q.dimension] += score;
+            }
+        });
+
+        // Normalize to -10 to +10 range
+        // Raw range per dimension (5 questions): 5 to 25. Midpoint 15.
+        // Result = Raw - 15.
+        const normalizedScores = {};
+        Object.keys(scores).forEach(key => {
+            normalizedScores[key] = scores[key] - 15;
+            // Bound check
+            if (normalizedScores[key] > 10) normalizedScores[key] = 10;
+            if (normalizedScores[key] < -10) normalizedScores[key] = -10;
+        });
+
+        // Save to DB via service
+        if (user?.id) {
+            try {
+                await assessmentService.completeBigFive(user.id, normalizedScores);
+            } catch (err) {
+                console.error("Failed to save Big Five results", err);
+            }
+        }
+
+        celebrate(scoutMessages.bigFive.complete);
+
+        setTimeout(() => {
+            setStep(isStandalone ? 9 : 3); // Next Step: Work Values OR Hub
+        }, 2000);
     };
 
-    if (showUnlock) {
+    if (loading) {
         return (
-            <UnlockModal
-                isOpen={showUnlock}
-                onClose={() => {
-                    setShowUnlock(false);
-                    setStep(8); // Return to TestHub
-                }}
-                onUpgrade={handleUpgrade}
-            />
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                <Loader2 className="w-10 h-10 animate-spin text-purple-600 mb-4" />
+                <p className="text-gray-500">Vragen laden...</p>
+            </div>
         );
     }
 
+    if (!currentQuestion) return null;
+
     return (
-        <div className="max-w-4xl mx-auto px-4 py-8 pb-24">
+        <div className="flex flex-col h-[85vh] w-full max-w-md mx-auto px-4 py-6 relative">
+
+            {/* Scout Mascot */}
+            <Scout />
+
             {/* Header */}
-            <div className="mb-8">
+            <div className="mb-6">
                 <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-purple-100 p-3 rounded-xl">
+                    <div className="bg-purple-100 p-2 rounded-xl">
                         <Brain className="text-purple-600 w-6 h-6" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Persoonlijkheid</h1>
-                        <p className="text-sm text-gray-500">Vraag {currentQuestion + 1} van {dilemmas.length}</p>
+                        <h1 className="text-xl font-bold text-gray-900">Persoonlijkheid</h1>
+                        <p className="text-sm text-gray-500">Vraag {currentQuestionIndex + 1} van {questions.length}</p>
                     </div>
                 </div>
 
-                {/* Progress Bar */}
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <motion.div
-                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        transition={{ duration: 0.3 }}
-                    />
-                </div>
+                <ProgressBar
+                    progress={currentQuestionIndex}
+                    total={questions.length}
+                    current={currentQuestionIndex + 1}
+                    label="Voortgang"
+                />
             </div>
 
             {/* Question Card */}
-            <AnimatePresence mode="wait">
-                <motion.div
-                    key={currentQuestion}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="bg-white rounded-2xl shadow-lg overflow-hidden"
-                >
-                    {/* Insight Label */}
-                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-3 border-b border-purple-100">
-                        <p className="text-xs uppercase tracking-wider text-purple-600 font-semibold text-center">
-                            {currentDilemma.insight}
-                        </p>
-                    </div>
+            <div className="flex-1 flex flex-col justify-center mb-8">
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={currentQuestion.id}
+                        initial={{ x: 50, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        exit={{ x: -50, opacity: 0 }}
+                        className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100 min-h-[200px] flex items-center justify-center text-center"
+                    >
+                        <h2 className="text-xl font-medium text-gray-800 leading-relaxed">
+                            "{currentQuestion.text}"
+                        </h2>
+                    </motion.div>
+                </AnimatePresence>
+            </div>
 
-                    {/* Split-Screen Options */}
-                    <div className="grid grid-cols-2 gap-0">
-                        {/* Left Option */}
-                        <motion.button
-                            onClick={() => handleOptionClick('left')}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            className={`p-8 text-left transition-all border-r border-gray-200 ${sliderValue < 50 ? 'bg-blue-50' : 'bg-white hover:bg-gray-50'
-                                }`}
-                        >
-                            <div className="flex items-start gap-3">
-                                <ChevronLeft className={`w-6 h-6 mt-1 flex-shrink-0 ${sliderValue < 50 ? 'text-blue-600' : 'text-gray-400'
-                                    }`} />
-                                <p className={`text-base font-medium ${sliderValue < 50 ? 'text-blue-900' : 'text-gray-700'
-                                    }`}>
-                                    {currentDilemma.leftOption}
-                                </p>
-                            </div>
-                        </motion.button>
+            {/* Interactive Scale */}
+            <div className="mt-auto mb-12">
+                <LikertScale
+                    value={answers[currentQuestion.id]}
+                    onChange={handleAnswer}
+                    labels={['Helemaal Oneens', 'Helemaal Eens']}
+                />
+                <div className="text-center text-xs text-gray-400 mt-2">
+                    Kies wat het beste bij jou past
+                </div>
+            </div>
 
-                        {/* Right Option */}
-                        <motion.button
-                            onClick={() => handleOptionClick('right')}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            className={`p-8 text-right transition-all ${sliderValue > 50 ? 'bg-purple-50' : 'bg-white hover:bg-gray-50'
-                                }`}
-                        >
-                            <div className="flex items-start gap-3 justify-end">
-                                <p className={`text-base font-medium ${sliderValue > 50 ? 'text-purple-900' : 'text-gray-700'
-                                    }`}>
-                                    {currentDilemma.rightOption}
-                                </p>
-                                <ChevronRight className={`w-6 h-6 mt-1 flex-shrink-0 ${sliderValue > 50 ? 'text-purple-600' : 'text-gray-400'
-                                    }`} />
-                            </div>
-                        </motion.button>
-                    </div>
+            {/* Scout Avatar */}
 
-                    {/* Slider Control */}
-                    <div className="px-8 py-6 bg-gray-50">
-                        <div className="mb-4">
-                            <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                value={sliderValue}
-                                onChange={handleSliderChange}
-                                className="w-full h-3 bg-gradient-to-r from-blue-200 via-gray-200 to-purple-200 rounded-full appearance-none cursor-pointer slider-thumb"
-                                style={{
-                                    background: `linear-gradient(to right, 
-                                        rgb(59, 130, 246) 0%, 
-                                        rgb(209, 213, 219) ${sliderValue}%, 
-                                        rgb(168, 85, 247) 100%)`
-                                }}
-                            />
-                        </div>
-
-                        {/* Slider Labels */}
-                        <div className="flex justify-between text-xs text-gray-500 mb-6">
-                            <span>Helemaal links</span>
-                            <span>Neutraal</span>
-                            <span>Helemaal rechts</span>
-                        </div>
-
-                        {/* Next Button */}
-                        <button
-                            onClick={() => handleNext()}
-                            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-4 rounded-xl hover:shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]"
-                        >
-                            {currentQuestion < dilemmas.length - 1 ? 'Volgende vraag' : 'Voltooien'}
-                        </button>
-                    </div>
-                </motion.div>
-            </AnimatePresence>
-
-            {/* Custom Slider Styles */}
-            <style jsx>{`
-                .slider-thumb::-webkit-slider-thumb {
-                    appearance: none;
-                    width: 24px;
-                    height: 24px;
-                    border-radius: 50%;
-                    background: white;
-                    border: 3px solid #9333ea;
-                    cursor: pointer;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-                }
-
-                .slider-thumb::-moz-range-thumb {
-                    width: 24px;
-                    height: 24px;
-                    border-radius: 50%;
-                    background: white;
-                    border: 3px solid #9333ea;
-                    cursor: pointer;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-                }
-            `}</style>
         </div>
     );
 };

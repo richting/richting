@@ -45,12 +45,65 @@ export const getDynamicWeights = (reliabilityScore) => {
     };
   } else {
     // Phase 3: RIASEC + Personality + Values
+    // SCCT is now applied as a separate modifier, not a weighted component
     return {
-      riasec: 0.4,
-      personality: 0.4,
+      riasec: 0.5,
+      personality: 0.3,
       values: 0.2
     };
   }
+};
+
+/**
+ * Calculate SCCT Self-Efficacy Modifier
+ * @param {Object} userEfficacy - User's self-efficacy scores (1-10)
+ * @param {Array} jobSkills - Array of job skills with importance and level
+ * @returns {number} Modifier value (-0.2 to +0.2)
+ */
+const calculateSCCTModifier = (userEfficacy, jobSkills) => {
+  if (!userEfficacy || !jobSkills || !Array.isArray(jobSkills) || jobSkills.length === 0) {
+    return 0;
+  }
+
+  // Sort skills by importance (descending) and take top 3
+  // Normalize importance to 0-1 if it's on 1-5 scale
+  const topSkills = [...jobSkills]
+    .sort((a, b) => (b.importance || 0) - (a.importance || 0))
+    .slice(0, 3);
+
+  let efficacyGap = 0;
+  let totalWeight = 0;
+
+  topSkills.forEach(skill => {
+    // Normalize skill name to match key in userEfficacy
+    const skillKey = (skill.name || '').toLowerCase().replace(/ /g, '_');
+    const userConfidence = userEfficacy[skillKey] || 5; // Default average confidence
+
+    // Normalize required level from 1-7 (O*NET) to 1-10
+    const requiredLevel = ((skill.level || 1) / 7) * 10;
+
+    // Calculate gap: required - user (positive means gap, negative means user is better)
+    const gap = requiredLevel - userConfidence;
+
+    // Weight by importance (1-5 scale)
+    const weight = (skill.importance || 1) / 5;
+
+    efficacyGap += gap * weight;
+    totalWeight += weight;
+  });
+
+  if (totalWeight === 0) return 0;
+
+  // Average weighted gap
+  const avgGap = efficacyGap / 3; // Using 3 as we took top 3
+
+  // Convert to modifier:
+  // Gap of +2 (harder than confident) -> penalty
+  // Gap of -2 (easier than confident) -> boost
+  const modifier = -avgGap / 10;
+
+  // Clamp between -0.2 and +0.2
+  return Math.max(-0.2, Math.min(0.2, modifier));
 };
 
 /**
@@ -80,7 +133,7 @@ const calculatePersonalityMatch = (userVector, careerIdealVector) => {
   return validFactors > 0 ? totalSimilarity / validFactors : 0;
 };
 
-export const calculateMatches = (userScores, userValues, careerData, personalityVector = null, reliabilityScore = 0) => {
+export const calculateMatches = (userScores, userValues, careerData, personalityVector = null, reliabilityScore = 0, selfEfficacy = null) => {
   if (!careerData || !Array.isArray(careerData)) return [];
 
   // Get dynamic weights based on reliability score
@@ -134,11 +187,23 @@ export const calculateMatches = (userScores, userValues, careerData, personality
       }
     }
 
-    // Calculate total score with dynamic weights
-    const totalScore =
+    // Calculate total score using Base Score + Modifier approach
+    // 1. Calculate weighted base score (normalized to 0-1)
+    const baseScore =
       (riasecMatch * weights.riasec) +
       (personalityMatch * weights.personality) +
       (valueMatch * weights.values);
+
+    // 2. Calculate SCCT modifier (range -0.2 to +0.2)
+    let scctModifier = 0;
+    if (selfEfficacy && career.skills) {
+      scctModifier = calculateSCCTModifier(selfEfficacy, career.skills);
+    }
+
+    // 3. Final Score = Base + Modifier (Clamped 0-1)
+    // This allows a perfect base match (1.0) to stay 1.0 (clamped),
+    // or a 0.9 match to become 1.0 with high self-efficacy.
+    const totalScore = Math.max(0, Math.min(1, baseScore + scctModifier));
 
     return {
       ...career,
@@ -146,6 +211,7 @@ export const calculateMatches = (userScores, userValues, careerData, personality
       riasecMatch,
       personalityMatch,
       valueMatch,
+      scctModifier,
       weights: { ...weights } // Include weights for debugging
     };
   });
@@ -234,7 +300,7 @@ const calculateCongruenceBonus = (userProfile, sectorProfile) => {
  * @param {number} reliabilityScore - User's reliability score (0-100)
  * @returns {Array} Sorted array of sector matches with scores
  */
-export const calculateSectorMatches = (userScores, userValues, sectorData, personalityVector = null, reliabilityScore = 0) => {
+export const calculateSectorMatches = (userScores, userValues, sectorData, personalityVector = null, reliabilityScore = 0, selfEfficacy = null) => {
   if (!sectorData || !Array.isArray(sectorData)) return [];
 
   // Get dynamic weights based on reliability score
@@ -290,8 +356,15 @@ export const calculateSectorMatches = (userScores, userValues, sectorData, perso
       (personalityMatch * weights.personality) +
       (valueMatch * weights.values);
 
-    // Apply congruence bonus (capped at -15% to +10%)
-    const totalScore = Math.max(0, Math.min(1, baseScore + congruenceBonus));
+    // Calculate SCCT modifier (aggregated from top jobs?)
+    // For sectors, we might need an aggregated skill profile or just skip SCCT if not available
+    let scctModifier = 0;
+    if (weights.scct > 0 && selfEfficacy && sector.top_skills) {
+      scctModifier = calculateSCCTModifier(selfEfficacy, sector.top_skills);
+    }
+
+    // Apply congruence bonus (capped at -15% to +10%) and SCCT
+    const totalScore = Math.max(0, Math.min(1, baseScore + congruenceBonus + (scctModifier * weights.scct)));
 
     return {
       ...sector,
@@ -299,6 +372,7 @@ export const calculateSectorMatches = (userScores, userValues, sectorData, perso
       riasecMatch,
       personalityMatch,
       valueMatch,
+      scctModifier,
       congruenceBonus, // Include for debugging
       weights: { ...weights } // Include weights for debugging
     };
@@ -318,11 +392,11 @@ export const calculateSectorMatches = (userScores, userValues, sectorData, perso
  * @param {number} reliabilityScore - User's reliability score (0-100)
  * @returns {Array} Sorted array of sector matches with enhanced scores
  */
-export const calculateSectorMatchesEnhanced = async (userScores, userValues, sectorData, careerData, personalityVector = null, reliabilityScore = 0) => {
+export const calculateSectorMatchesEnhanced = async (userScores, userValues, sectorData, careerData, personalityVector = null, reliabilityScore = 0, selfEfficacy = null) => {
   if (!sectorData || !Array.isArray(sectorData)) return [];
   if (!careerData || !Array.isArray(careerData)) {
     // Fallback to regular matching if no career data
-    return calculateSectorMatches(userScores, userValues, sectorData, personalityVector, reliabilityScore);
+    return calculateSectorMatches(userScores, userValues, sectorData, personalityVector, reliabilityScore, selfEfficacy);
   }
 
   // Get dynamic weights
@@ -354,14 +428,16 @@ export const calculateSectorMatchesEnhanced = async (userScores, userValues, sec
       careerAggregateScore = directSectorMatch;
     }
 
-    // 3. Holland congruence bonus (10% as bonus/penalty)
+    // 3. Holland congruence bonus (Range: -0.15 to +0.10)
+    // We treat this as a MODIFIER, not a weighted component in the base score
     const congruenceBonus = calculateCongruenceBonus(userScores, vector);
 
-    // Hybrid formula: 60% direct + 30% careers + 10% congruence
-    const hybridScore =
-      (directSectorMatch * 0.60) +
-      (careerAggregateScore * 0.30) +
-      (congruenceBonus * 0.10) + 0.10; // +0.10 to normalize congruence from bonus to weight
+    // Hybrid RIASEC Score for Sectors:
+    // 70% Direct Match + 30% Career Aggregate
+    // (Adjusted from 60/30/10 split since Congruence is now a modifier)
+    const hybridRiasecScore =
+      (directSectorMatch * 0.70) +
+      (careerAggregateScore * 0.30);
 
     // Also calculate personality and value matches
     let personalityMatch = 0;
@@ -389,20 +465,32 @@ export const calculateSectorMatchesEnhanced = async (userScores, userValues, sec
       }
     }
 
-    // Final score: combine hybrid RIASEC with personality and values
-    const finalScore =
-      (hybridScore * weights.riasec) +
+    // SCCT for sectors
+    let scctModifier = 0;
+    if (selfEfficacy && sector.top_skills) {
+      scctModifier = calculateSCCTModifier(selfEfficacy, sector.top_skills);
+    }
+
+    // Final Calculation:
+    // 1. Base Score (Weighted Average of Pillars)
+    const baseScore =
+      (hybridRiasecScore * weights.riasec) +
       (personalityMatch * weights.personality) +
       (valueMatch * weights.values);
 
+    // 2. Final Score = Base + Congruence + SCCT (Clamped)
+    const finalScore = Math.max(0, Math.min(1, baseScore + congruenceBonus + scctModifier));
+
     return {
       ...sector,
-      matchScore: Math.max(0, Math.min(1, finalScore)),
-      riasecMatch: directSectorMatch,
+      matchScore: finalScore,
+      riasecMatch: hybridRiasecScore, // Expose the hybrid score as the primary riasec match
+      directSectorMatch,
       careerAggregateScore,
       congruenceBonus,
       personalityMatch,
       valueMatch,
+      scctModifier,
       careersCount: careersInSector.length,
       weights: { ...weights }
     };
@@ -412,14 +500,7 @@ export const calculateSectorMatchesEnhanced = async (userScores, userValues, sec
 };
 
 export const getVisibleMatches = (matches, reliabilityScore, isPremium) => {
-  if (isPremium) {
-    if (reliabilityScore >= 100) return matches;
-    if (reliabilityScore >= 60) return matches.slice(0, 3);
-    return matches.slice(0, 1);
-  }
-
-  if (reliabilityScore < 30) return [];
-  if (reliabilityScore === 30) return matches.slice(0, 1);
-  return matches.slice(0, 1);
+  // Always return all matches as per request to remove paywall/restrictions
+  return matches;
 };
 

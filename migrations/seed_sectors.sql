@@ -133,35 +133,4 @@ ARRAY['achievement', 'autonomy', 'creativity']),
 '{"extraversion": 1, "conscientiousness": 8, "openness": 3, "agreeableness": 4, "stability": 7}',
 ARRAY['security', 'dynamic', 'independence']);
 
--- Update existing careers to link to sectors based on career_direction
--- Map current career_direction to new sector IDs
-
--- First, get sector IDs for each mapping
-DO $$
-DECLARE
-    sector_wetenschap UUID;
-    sector_it UUID;
-    sector_kunst UUID;
-    sector_zorg UUID;
-    sector_business UUID;
-    sector_finance UUID;
-BEGIN
-    -- Get sector IDs
-    SELECT id INTO sector_wetenschap FROM sectors WHERE name_nl = 'Wetenschap & Techniek';
-    SELECT id INTO sector_it FROM sectors WHERE name_nl = 'IT & Data';
-    SELECT id INTO sector_kunst FROM sectors WHERE name_nl = 'Kunst & Media';
-    SELECT id INTO sector_zorg FROM sectors WHERE name_nl = 'Zorg & Welzijn';
-    SELECT id INTO sector_business FROM sectors WHERE name_nl = 'Business & Management';
-    SELECT id INTO sector_finance FROM sectors WHERE name_nl = 'Financiën & Administratie';
-
-    -- Update careers based on career_direction
-    UPDATE careers SET sector_id = sector_wetenschap WHERE career_direction = 'Techniek & Praktijk';
-    UPDATE careers SET sector_id = sector_it WHERE career_direction = 'Onderzoek & Data';
-    UPDATE careers SET sector_id = sector_kunst WHERE career_direction = 'Creatie & Design';
-    UPDATE careers SET sector_id = sector_zorg WHERE career_direction = 'Zorg & Welzijn';
-    UPDATE careers SET sector_id = sector_business WHERE career_direction = 'Business & Management';
-    UPDATE careers SET sector_id = sector_finance WHERE career_direction = 'Financiën & Administratie';
-    
-    -- Log result
-    RAISE NOTICE 'Careers updated with sector_id based on career_direction';
-END $$;
+-- End of sector seeding

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { saveUserScores, saveUserValues, saveUserProgress, savePersonalityVector, resetUserModule } from '../utils/syncUserData';
+import { saveUserScores, saveUserValues, saveUserProgress, savePersonalityVector, saveUserSelfEfficacy, resetUserModule } from '../utils/syncUserData';
 import { supabase } from '../lib/supabase';
+import { saveToLocalStorage, clearLocalStorage, loadFromLocalStorage } from '../utils/localStorageBackup';
 
 export const useStore = create((set, get) => ({
     // RIASEC Scores (0-20 per category typically, normalized later)
@@ -13,14 +14,14 @@ export const useStore = create((set, get) => ({
         C: 0
     },
 
-    // User Values (sliders 0-100 probably, or 1-10)
+    // User Values (O*NET Work Values 1-10)
     userValues: {
-        security: 5,
-        creativity: 5,
-        autonomy: 5,
-        team: 5,
-        dynamic: 5,
-        impact: 5
+        achievement: 5,
+        independence: 5,
+        recognition: 5,
+        relationships: 5,
+        support: 5,
+        working_conditions: 5
     },
 
     // Personality Vector (Big Five: -10 to +10 per factor)
@@ -32,8 +33,18 @@ export const useStore = create((set, get) => ({
         stability: 0
     },
 
+    // SCCT Self-Efficacy (1-10 scale per skill cluster)
+    selfEfficacy: {
+        'complex_problem_solving': 5,
+        'critical_thinking': 5,
+        'social_perceptiveness': 5,
+        'active_listening': 5,
+        'programming': 5,
+        // Add more default skills as needed
+    },
+
     // Navigation State
-    currentStep: 0, // 0: Onboarding, 1: Swipes, 2: Dilemmas, 3: Auth, 4: Home, 5: Profile, 6: Matches, 7: Deep Dive
+    currentStep: 0, // 0: Onboarding, 1: Swipes, 2: Personality, 3: WorkValues, 4: SCCT, 5: Auth, 6: Home, 7: Profile, 8: Matches, 9: Deep Dive
 
     // User State
     user: null, // null or { name, email, ... }
@@ -51,40 +62,75 @@ export const useStore = create((set, get) => ({
 
     // Actions
     login: (userData, loadedData) => set((state) => {
+        // Import localStorage backup utility (imported at top)
+        // LocalStorage backup utility is imported at the top
+
         // Prepare strict state object to ensure clean slate
         // This prevents "ghost" data from a previous onboarding session from being merged into
         // an existing account if that account has no data or fails to load.
 
         const defaultScores = { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 };
-        const defaultValues = { security: 5, creativity: 5, autonomy: 5, team: 5, dynamic: 5, impact: 5 };
+        const defaultValues = { achievement: 5, independence: 5, recognition: 5, relationships: 5, support: 5, working_conditions: 5 };
         const defaultPersonality = { extraversion: 0, conscientiousness: 0, openness: 0, agreeableness: 0, stability: 0 };
+        const defaultSelfEfficacy = { 'complex_problem_solving': 5, 'critical_thinking': 5, 'social_perceptiveness': 5, 'active_listening': 5, 'programming': 5 };
+
+        // Check for localStorage backup from anonymous session
+        const localBackup = loadFromLocalStorage();
+
+        // Merge logic: Use localStorage data if it exists AND is more recent than DB data
+        // OR if DB has no data at all
+        const hasDBData = loadedData?.scores || loadedData?.personalityVector;
+        const useLocalBackup = localBackup && (!hasDBData || localBackup.reliabilityScore > (loadedData?.progress?.reliabilityScore || 0));
 
         const newState = {
             user: userData,
             isLoginMode: false,
             isPremium: userData.isPremium || false,
 
-            // STRICTLY OVERWRITE STATE - Do not allow shallow merge to keep old local state
-            userScores: loadedData?.scores || defaultScores,
-            userValues: loadedData?.values || defaultValues,
-            personalityVector: loadedData?.personalityVector || defaultPersonality,
+            // Use localStorage backup if available and more complete, otherwise use DB data
+            userScores: useLocalBackup ? (localBackup.userScores || defaultScores) : (loadedData?.scores || defaultScores),
+            userValues: useLocalBackup ? (localBackup.userValues || defaultValues) : (loadedData?.values || defaultValues),
+            personalityVector: useLocalBackup ? (localBackup.personalityVector || defaultPersonality) : (loadedData?.personalityVector || defaultPersonality),
+            selfEfficacy: useLocalBackup ? (localBackup.selfEfficacy || defaultSelfEfficacy) : (loadedData?.selfEfficacy || defaultSelfEfficacy),
 
-            // Progress is safer to merge if needed, but for "Clean Login" we usually want DB truth
-            reliabilityScore: loadedData?.progress?.reliabilityScore || 0,
-            completedModules: loadedData?.progress?.completedModules || [],
-            currentStep: loadedData?.progress?.currentStep ?? 4, // Default to home (4) if login
+            // Progress
+            reliabilityScore: useLocalBackup ? (localBackup.reliabilityScore || 0) : (loadedData?.progress?.reliabilityScore || 0),
+            completedModules: useLocalBackup ? (localBackup.completedModules || []) : (loadedData?.progress?.completedModules || []),
+            currentStep: useLocalBackup ? (localBackup.currentStep || 6) : (loadedData?.progress?.currentStep ?? 6),
             dailySwipes: loadedData?.progress?.dailySwipes || 0,
             lastSwipeDate: loadedData?.progress?.lastSwipeDate || null
         };
 
-        // If we found a current step in DB (and it's not 0/onboarding), use it
-        // Or if it IS 0, we might want to keep it 0? 
-        // Logic: If user logs in, and has NO progress (step 0), they probably should go to onboarding?
-        // But the previous logic said "Redirect to home (4)" if authenticated.
-        // Let's stick to the safe "Home" default unless DB says otherwise.
+        // If we used localStorage backup, sync it to database
+        if (useLocalBackup && userData.id) {
+            console.log('📤 Syncing localStorage backup to database...');
 
-        if (loadedData?.progress?.currentStep !== undefined) {
-            newState.currentStep = loadedData.progress.currentStep;
+            // Sync all data to database
+            if (localBackup.userScores) {
+                saveUserScores(userData.id, localBackup.userScores);
+            }
+            if (localBackup.userValues) {
+                saveUserValues(userData.id, localBackup.userValues);
+            }
+            if (localBackup.personalityVector) {
+                savePersonalityVector(userData.id, localBackup.personalityVector);
+            }
+            if (localBackup.selfEfficacy) {
+                saveUserSelfEfficacy(userData.id, localBackup.selfEfficacy);
+            }
+
+            // Sync progress
+            saveUserProgress(userData.id, {
+                reliabilityScore: localBackup.reliabilityScore,
+                completedModules: localBackup.completedModules,
+                currentStep: localBackup.currentStep,
+            });
+
+            // Clear localStorage after successful sync
+            setTimeout(() => {
+                clearLocalStorage();
+                console.log('✅ localStorage backup synced and cleared');
+            }, 1000);
         }
 
         return newState;
@@ -99,7 +145,9 @@ export const useStore = create((set, get) => ({
             reliabilityScore: 0,
             completedModules: [],
             userScores: { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 },
-            userValues: { security: 5, creativity: 5, autonomy: 5, team: 5, dynamic: 5, impact: 5 }
+            userScores: { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 },
+            userValues: { achievement: 5, independence: 5, recognition: 5, relationships: 5, support: 5, working_conditions: 5 },
+            selfEfficacy: { 'complex_problem_solving': 5, 'critical_thinking': 5, 'social_perceptiveness': 5, 'active_listening': 5, 'programming': 5 }
         });
     },
 
@@ -112,6 +160,9 @@ export const useStore = create((set, get) => ({
         // Auto-save to database if user is logged in
         if (state.user?.id) {
             saveUserScores(state.user.id, newScores);
+        } else {
+            // Backup to localStorage for anonymous users
+            setTimeout(() => get().backupToLocalStorage(), 0);
         }
 
         return { userScores: newScores };
@@ -182,6 +233,9 @@ export const useStore = create((set, get) => ({
         // Auto-save to database if user is logged in
         if (state.user?.id) {
             saveUserValues(state.user.id, newValues);
+        } else {
+            // Backup to localStorage for anonymous users
+            setTimeout(() => get().backupToLocalStorage(), 0);
         }
 
         return { userValues: newValues };
@@ -192,9 +246,24 @@ export const useStore = create((set, get) => ({
         // Auto-save to database if user is logged in
         if (state.user?.id) {
             savePersonalityVector(state.user.id, vector);
+        } else {
+            // Backup to localStorage for anonymous users
+            setTimeout(() => get().backupToLocalStorage(), 0);
         }
 
         return { personalityVector: vector };
+    }),
+
+    // Set self efficacy
+    setSelfEfficacy: (efficacyData) => set((state) => {
+        const newEfficacy = { ...state.selfEfficacy, ...efficacyData };
+
+        // Auto-save to database if user is logged in
+        if (state.user?.id) {
+            saveUserSelfEfficacy(state.user.id, newEfficacy);
+        }
+
+        return { selfEfficacy: newEfficacy };
     }),
 
     nextStep: () => set((state) => {
@@ -220,6 +289,8 @@ export const useStore = create((set, get) => ({
         // ensuring they don't see onboarding accidentally.
         let targetStep = step;
 
+        const newState = { currentStep: targetStep };
+
         // Auto-save progress
         if (state.user?.id) {
             saveUserProgress(state.user.id, {
@@ -229,9 +300,18 @@ export const useStore = create((set, get) => ({
                 dailySwipes: state.dailySwipes,
                 lastSwipeDate: state.lastSwipeDate
             });
+        } else {
+            // Backup to localStorage for anonymous users
+            // We use get().backupToLocalStorage() but we can't access get() here easily inside set()
+            // So we'll use the imported function directly
+            // Backup to localStorage for anonymous users
+            saveToLocalStorage({
+                ...state,
+                currentStep: targetStep
+            });
         }
 
-        return { currentStep: targetStep };
+        return newState;
     }),
 
     setPremium: (status) => set({ isPremium: status }),
@@ -275,6 +355,9 @@ export const useStore = create((set, get) => ({
         // Auto-save to database if user is logged in
         if (state.user?.id) {
             saveUserProgress(state.user.id, newProgress);
+        } else {
+            // Backup to localStorage for anonymous users
+            setTimeout(() => get().backupToLocalStorage(), 0);
         }
 
         return newProgress;
@@ -324,20 +407,72 @@ export const useStore = create((set, get) => ({
                 updates.dailySwipes = 0; // Optional: give them their swipes back? Maybe not strictly required but friendly.
             }
             else if (moduleName === 'dilemmas' || moduleName === 'values') {
-                updates.userValues = { security: 5, creativity: 5, autonomy: 5, team: 5, dynamic: 5, impact: 5 };
+                updates.userValues = { achievement: 5, independence: 5, recognition: 5, relationships: 5, support: 5, working_conditions: 5 };
             }
             else if (moduleName === 'bigfive') {
                 updates.personalityVector = { extraversion: 0, conscientiousness: 0, openness: 0, agreeableness: 0, stability: 0 };
+            }
+            else if (moduleName === 'capabilities') { // Assuming capabilities module writes to selfEfficacy
+                updates.selfEfficacy = { 'complex_problem_solving': 5, 'critical_thinking': 5, 'social_perceptiveness': 5, 'active_listening': 5, 'programming': 5 };
             }
 
             return updates;
         });
     },
 
+    // Helper: Initialize store from localStorage backup (for anonymous users)
+    // Should be called on app load BEFORE auth check
+    initializeFromBackup: () => {
+        const state = get();
+
+        // Only restore if user is NOT logged in
+        if (!get().user?.id) {
+            const backup = loadFromLocalStorage();
+
+            if (backup) {
+                console.log('🔄 Restoring from localStorage backup...', backup);
+                set({
+                    userScores: backup.userScores || state.userScores,
+                    userValues: backup.userValues || state.userValues,
+                    personalityVector: backup.personalityVector || state.personalityVector,
+                    selfEfficacy: backup.selfEfficacy || state.selfEfficacy,
+                    reliabilityScore: backup.reliabilityScore || state.reliabilityScore,
+                    completedModules: backup.completedModules || state.completedModules,
+                    currentStep: backup.currentStep ?? state.currentStep,
+                });
+                console.log('✅ Restored from localStorage backup');
+            }
+        }
+    },
+
+    // Helper: Backup current state to localStorage (for anonymous users)
+    backupToLocalStorage: () => {
+        const state = get();
+
+        // Only backup if user is NOT logged in
+        if (!state.user?.id) {
+            saveToLocalStorage({
+                userScores: state.userScores,
+                userValues: state.userValues,
+                personalityVector: state.personalityVector,
+                selfEfficacy: state.selfEfficacy,
+                reliabilityScore: state.reliabilityScore,
+                completedModules: state.completedModules,
+                currentStep: state.currentStep,
+            });
+        }
+    },
+
+    // Helper: Clear localStorage backup (called after successful login/sync)
+    clearBackup: () => {
+        clearLocalStorage();
+    },
+
     reset: () => set({
         userScores: { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 },
-        userValues: { security: 5, creativity: 5, autonomy: 5, team: 5, dynamic: 5, impact: 5 },
+        userValues: { achievement: 5, independence: 5, recognition: 5, relationships: 5, support: 5, working_conditions: 5 },
         personalityVector: { extraversion: 0, conscientiousness: 0, openness: 0, agreeableness: 0, stability: 0 },
+        selfEfficacy: { 'complex_problem_solving': 5, 'critical_thinking': 5, 'social_perceptiveness': 5, 'active_listening': 5, 'programming': 5 },
         currentStep: 0,
         user: null,
         reliabilityScore: 0,
